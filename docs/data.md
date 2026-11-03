@@ -409,6 +409,12 @@ original 4-bit color indices, while `normal.pal` and `shiny.pal` are the palette
 colors in the JASC `.pal` file; the PNG palette is for viewing in an image editor. The game assembles characters
 into sprites using the adjacent `*_cells.ncer` and `*_animations.nanr.lz11` Nitro resources, so a raw PNG sheet can look
 fragmented. Those resources are preserved as separate source files and can be replaced with edited Nitro data.
+`tools/data/nitro_cells.py` reads them and writes them back byte for byte, as JSON: `dump FILE` shows a file's cells,
+cell animations, multi-cells, multi-cell animations or MCSS quads, `pack` writes the file from the JSON, and `check`
+converts every such file under `res/` (15,343, the trainers' and the 2D graphics' too) and back. MCSS draws a battle
+sprite's parts from the quads of its `*_info.bin` (`MCSSBin` in `src/system/mcss.c`), each a position and size and its
+texture coordinates in `front.png`, and the multi-cell animation (`*_multi_animations.nmar`) and cell animations move
+and rotate them. The packers still read the Nitro files, not the JSON.
 
 `icon.png` is a 32×64 two-frame icon, using a bank in
 `res/pokemon/shared/icon_palettes.pal` (the PC boxes use `icon_palettes_box.pal`); the code in
