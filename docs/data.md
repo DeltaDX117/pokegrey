@@ -1379,6 +1379,13 @@ beside its `data.json`: the species, the sex (null for either) and the form that
 `tools/data/walking_pokemon_data.py` packs the table from the codes that have one, in the list's order, the same in
 both versions, and `res/field/actors/walking_pokemon.schema.json` describes the fields.
 
+Each walking Pokémon also has `sprite_shiny.pal`, a draft shiny palette for a hack's shiny overworld sprites, which the
+game doesn't have and the build doesn't read. The overworld palettes are drawn apart from the battle sprites', so
+`tools/data/overworld_shiny_palettes.py generate res` wrote each from the battle sprite's `normal.pal` and `shiny.pal`:
+every overworld color moves as far as the nearest color the battle sprite draws with moves in its shiny palette. It
+keeps an existing file, which may have been touched up by hand, unless given `--force`, and `preview res OUTPUT_DIR`
+draws each sprite's first frame normal and shiny side by side.
+
 A zone's header names an NPC info cache by its `"npc_cache"`, `res/field/actors/npc_caches/<n>.json` (`a/0/5/7`),
 which the field loads as the player enters the zone (`LoadMModelSystemInfoCache`) and takes the records of its object
 codes from before it reads the model table (`GetNPCMdlInfoForOBJCODE`); a number from 24 on is none. Each cache lists
