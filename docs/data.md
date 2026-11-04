@@ -414,7 +414,8 @@ cell animations, multi-cells, multi-cell animations or MCSS quads, `pack` writes
 converts every such file under `res/` (15,343, the trainers' and the 2D graphics' too) and back. MCSS draws a battle
 sprite's parts from the quads of its `*_info.bin` (`MCSSBin` in `src/system/mcss.c`), each a position and size and its
 texture coordinates in `front.png`, and the multi-cell animation (`*_multi_animations.nmar`) and cell animations move
-and rotate them. The packers still read the Nitro files, not the JSON.
+and rotate them. The packers still read the Nitro files, not the JSON. [Cells and animations as JSON](cells-and-animations.md)
+describes the JSON.
 
 `icon.png` is a 32×64 two-frame icon, using a bank in
 `res/pokemon/shared/icon_palettes.pal` (the PC boxes use `icon_palettes_box.pal`); the code in

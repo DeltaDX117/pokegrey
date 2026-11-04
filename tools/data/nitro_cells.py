@@ -16,10 +16,12 @@ written again as NitroSystem's converter laid it out:
 - a cell or multi-cell animation bank (.nanr, RNAN; .nmar, RAMN) is its sequences, each with its frames: the frame's
   duration and content, an index, an index with a translation, or an index with a rotation, scale and translation, by
   the sequence's element type. The converter stored each different content once in the file, in the order that frames
-  first use it, with the contents of each sequence padded to 4 bytes with 0xcc. In 19 of the game's 5,688 files frames don't
-  share every content they could, and their JSON gives each frame's place in the contents as "slot";
+  first use it, with the contents of each sequence padded to 4 bytes with 0xcc. In 19 of the game's 5,688 files frames
+  don't share every content they could, and their JSON gives each frame's place in the contents as "slot";
 - a multi-cell bank (.nmcr, RCMN) is its multi-cells, each with its nodes: the cell animation sequence that the node
-  plays, its position, and the node's attributes, whose high byte is the cell animation it uses.
+  plays, its position, the cell animation that plays it and its play mode.
+
+docs/cells-and-animations.md describes the JSON, with its units and the values it leaves out.
 
 A battle sprite's MCSS file (*_info.bin, the bin of MCSSLoadInfo in src/system/mcss.c) is its image's size and offset,
 each cell's quads, which are what MCSS draws for the cells that the animations index (a position and size, and the
@@ -47,6 +49,11 @@ ELEMENTS = ["index", "index_srt", "index_t"]
 ELEMENT_SIZES = {"index": 2, "index_srt": 16, "index_t": 8}
 PLAY_MODES = ["invalid", "forward", "forward_loop", "reverse", "reverse_loop"]
 MAPPINGS = ["1d_32k", "1d_64k", "1d_128k", "1d_256k", "2d"]
+# A multi-cell node's play mode, in its attributes' low 4 bits: whether its cell animation restarts when the multi-cell
+# animation shows the node, or continues (NNSi_G2dGetMultiCellNodePlayMode). NitroSystem's converter set bit 5 in every
+# node of the game's files, for a reason unknown, which "flags" overrides
+NODE_PLAY_MODES = ["reset", "continue"]
+NODE_FLAGS = 0x20
 
 
 def pad4(blob: bytes) -> bytes:
@@ -130,30 +137,50 @@ def write_extras(data: dict) -> list[tuple[bytes, bytes]]:
 # Cells
 
 
+# An OAM's width and height in pixels by its shape (square, wide, tall) and size; shape 3 is prohibited
+OAM_SIZES = [[(8, 8), (16, 16), (32, 32), (64, 64)], [(16, 8), (32, 8), (32, 16), (64, 32)],
+             [(8, 16), (8, 32), (16, 32), (32, 64)]]
+OAM_MODES = ["normal", "translucent", "window", "bitmap"]
+
+
 def read_oam(attr0: int, attr1: int, attr2: int) -> dict:
-    """Returns an OAM's fields: its first attribute's y, affine and hidden or double-size flags, mode, mosaic, 256
-    colors and shape; its second's x, then its affine matrix or its unused bits and flips, and its size; its third's
-    character, priority and palette."""
-    oam = {"x": attr1 & 0x1FF, "y": attr0 & 0xFF, "shape": attr0 >> 14, "size": attr1 >> 14,
-           "character": attr2 & 0x3FF, "priority": (attr2 >> 10) & 3, "palette": attr2 >> 12}
-    flags = {"affine": attr0 >> 8 & 1, "double_or_hidden": attr0 >> 9 & 1, "mode": attr0 >> 10 & 3,
-             "mosaic": attr0 >> 12 & 1, "colors_256": attr0 >> 13 & 1}
-    if flags["affine"]:
-        flags["matrix"] = attr1 >> 9 & 0x1F
+    """Returns an OAM's fields: its position from the cell's origin, its size in pixels, its first character,
+    priority and palette, and the flags it sets: affine with its matrix and double size, or else hidden, flips and the
+    second attribute's unused bits; mode, mosaic and 256 colors."""
+    x, y, shape, size = attr1 & 0x1FF, attr0 & 0xFF, attr0 >> 14, attr1 >> 14
+    oam = {"x": x - 512 if x >= 256 else x, "y": y - 256 if y >= 128 else y}
+    if shape < 3:
+        oam["width"], oam["height"] = OAM_SIZES[shape][size]
     else:
-        flags.update({"unused": attr1 >> 9 & 7, "flip_h": attr1 >> 12 & 1, "flip_v": attr1 >> 13 & 1})
-    oam.update({name: value for name, value in flags.items() if value})
-    return oam
+        oam["shape"], oam["size"] = shape, size
+    oam.update({"character": attr2 & 0x3FF, "priority": attr2 >> 10 & 3, "palette": attr2 >> 12})
+    if attr0 >> 8 & 1:
+        oam.update({"affine": True, "matrix": attr1 >> 9 & 0x1F, "double_size": bool(attr0 >> 9 & 1)})
+    else:
+        oam.update({"hidden": bool(attr0 >> 9 & 1), "flip_h": bool(attr1 >> 12 & 1), "flip_v": bool(attr1 >> 13 & 1),
+                    "unused": attr1 >> 9 & 7})
+    oam.update({"mode": OAM_MODES[attr0 >> 10 & 3], "mosaic": bool(attr0 >> 12 & 1),
+                "colors_256": bool(attr0 >> 13 & 1)})
+    defaults = {"matrix": 0, "double_size": False, "hidden": False, "flip_h": False, "flip_v": False, "unused": 0,
+                "mode": "normal", "mosaic": False, "colors_256": False}
+    return {name: value for name, value in oam.items() if defaults.get(name, None) != value}
 
 
 def write_oam(oam: dict) -> bytes:
-    attr0 = (oam["y"] | oam.get("affine", 0) << 8 | oam.get("double_or_hidden", 0) << 9 | oam.get("mode", 0) << 10
-             | oam.get("mosaic", 0) << 12 | oam.get("colors_256", 0) << 13 | oam["shape"] << 14)
-    if oam.get("affine", 0):
-        attr1 = oam["x"] | oam.get("matrix", 0) << 9
+    if "width" in oam:
+        shape, size = next((shape, sizes.index((oam["width"], oam["height"])))
+                           for shape, sizes in enumerate(OAM_SIZES) if (oam["width"], oam["height"]) in sizes)
     else:
-        attr1 = oam["x"] | oam.get("unused", 0) << 9 | oam.get("flip_h", 0) << 12 | oam.get("flip_v", 0) << 13
-    attr1 |= oam["size"] << 14
+        shape, size = oam["shape"], oam["size"]
+    attr0 = oam["y"] & 0xFF | OAM_MODES.index(oam.get("mode", "normal")) << 10 | oam.get("mosaic", False) << 12
+    attr0 |= oam.get("colors_256", False) << 13 | shape << 14
+    attr1 = oam["x"] & 0x1FF | size << 14
+    if oam.get("affine", False):
+        attr0 |= 1 << 8 | oam.get("double_size", False) << 9
+        attr1 |= oam.get("matrix", 0) << 9
+    else:
+        attr0 |= oam.get("hidden", False) << 9
+        attr1 |= oam.get("unused", 0) << 9 | oam.get("flip_h", False) << 12 | oam.get("flip_v", False) << 13
     attr2 = oam["character"] | oam["priority"] << 10 | oam["palette"] << 12
     return struct.pack("<3H", attr0, attr1, attr2)
 
@@ -172,7 +199,9 @@ def read_cells(blocks) -> dict:
         if oam_offset != expected:
             raise ValueError("a cell's OAMs aren't in order")
         expected += 6 * oam_count
-        cell = {"attr": cell_attr}
+        cell = {"radius": cell_attr & 0x3F}
+        if cell_attr & ~0x3F:
+            cell["flags"] = cell_attr & ~0x3F
         if with_bounds:
             cell["bounds"] = dict(zip(("max_x", "max_y", "min_x", "min_y"),
                                       struct.unpack_from("<4h", data, cell_offset + i * cell_size + 8)))
@@ -187,7 +216,7 @@ def read_cells(blocks) -> dict:
 def write_cells(cells: dict) -> list[tuple[bytes, bytes]]:
     table, oams = b"", b""
     for cell in cells["cells"]:
-        table += struct.pack("<HHI", len(cell["oams"]), cell["attr"], len(oams))
+        table += struct.pack("<HHI", len(cell["oams"]), cell["radius"] | cell.get("flags", 0), len(oams))
         if cells["bounds"]:
             bounds = cell["bounds"]
             table += struct.pack("<4h", bounds["max_x"], bounds["max_y"], bounds["min_x"], bounds["min_y"])
@@ -206,11 +235,12 @@ def read_content(data: bytes, offset: int, element: str) -> dict:
     if element == "index_t":
         index, unused, x, y = struct.unpack_from("<HHhh", data, offset)
         content = {"index": index, "x": x, "y": y}
+        unused = None if unused == BEEF else unused
     else:
         index, rotation, scale_x, scale_y, x, y = struct.unpack_from("<HHiihh", data, offset)
         content = {"index": index, "rotation": rotation, "scale_x": scale_x, "scale_y": scale_y, "x": x, "y": y}
-        unused = 0
-    if unused:
+        unused = None
+    if unused is not None:
         content["unused"] = unused
     return content
 
@@ -219,7 +249,7 @@ def write_content(content: dict, element: str) -> bytes:
     if element == "index":
         return struct.pack("<H", content["index"])
     if element == "index_t":
-        return struct.pack("<HHhh", content["index"], content.get("unused", 0), content["x"], content["y"])
+        return struct.pack("<HHhh", content["index"], content.get("unused", BEEF), content["x"], content["y"])
     return struct.pack("<HHiihh", content["index"], content["rotation"], content["scale_x"], content["scale_y"],
                        content["x"], content["y"])
 
@@ -246,7 +276,7 @@ def content_layout(sequences: list[dict]) -> list[list[int]]:
     return places
 
 
-def read_animations(blocks) -> dict:
+def read_animations(blocks, file_kind: int) -> dict:
     data = blocks[0][1]
     count, frame_count, sequence_offset, frame_offset, content_offset, strings, extended = (
         struct.unpack_from("<HHIIIII", data))
@@ -260,8 +290,9 @@ def read_animations(blocks) -> dict:
             raise ValueError("a sequence's frames aren't in order")
         expected += frames
         element = ELEMENTS[anim_type & 0xFFFF]
-        sequence = {"kind": anim_type >> 16, "element": element, "play_mode": PLAY_MODES[play_mode],
-                    "loop_start": loop_start, "frames": []}
+        sequence = {"element": element, "play_mode": PLAY_MODES[play_mode], "loop_start": loop_start, "frames": []}
+        if anim_type >> 16 != file_kind:
+            sequence["kind"] = anim_type >> 16
         offsets = []
         for j in range(frames):
             content_at, duration, pad = struct.unpack_from("<IHH", data, frame_offset + frames_at + 8 * j)
@@ -284,12 +315,12 @@ def read_animations(blocks) -> dict:
     return {"sequences": sequences, **read_extras(blocks, b"ABNK")}
 
 
-def write_animations(animations: dict) -> list[tuple[bytes, bytes]]:
+def write_animations(animations: dict, file_kind: int) -> list[tuple[bytes, bytes]]:
     sequences = animations["sequences"]
     places = content_layout(sequences)
     table, frames, contents = b"", b"", bytearray()
     for sequence, offsets in zip(sequences, places):
-        anim_type = sequence["kind"] << 16 | ELEMENTS.index(sequence["element"])
+        anim_type = sequence.get("kind", file_kind) << 16 | ELEMENTS.index(sequence["element"])
         table += struct.pack("<HHIII", len(sequence["frames"]), sequence["loop_start"], anim_type,
                              PLAY_MODES.index(sequence["play_mode"]), len(frames))
         for frame, offset in zip(sequence["frames"], offsets):
@@ -322,8 +353,11 @@ def read_multi_cells(blocks) -> dict:
         multi_cell = {"cell_animations": cell_animations, "nodes": []}
         for j in range(nodes):
             sequence, x, y, attr = struct.unpack_from("<HhhH", data, node_offset + nodes_at + 8 * j)
-            multi_cell["nodes"].append({"sequence": sequence, "x": x, "y": y, "cell_animation": attr >> 8,
-                                        "attr": attr & 0xFF})
+            node = {"sequence": sequence, "x": x, "y": y, "cell_animation": attr >> 8,
+                    "play_mode": NODE_PLAY_MODES[attr & 0xF]}
+            if attr & 0xF0 != NODE_FLAGS:
+                node["flags"] = attr & 0xF0
+            multi_cell["nodes"].append(node)
         multi_cells.append(multi_cell)
     if node_offset != cell_offset + 8 * count:
         raise ValueError("nodes that don't follow the multi-cells")
@@ -335,16 +369,17 @@ def write_multi_cells(multi_cells: dict) -> list[tuple[bytes, bytes]]:
     for multi_cell in multi_cells["multi_cells"]:
         table += struct.pack("<HHI", len(multi_cell["nodes"]), multi_cell["cell_animations"], len(nodes))
         nodes += b"".join(struct.pack("<HhhH", node["sequence"], node["x"], node["y"],
-                                      node["cell_animation"] << 8 | node["attr"]) for node in multi_cell["nodes"])
+                                      node["cell_animation"] << 8 | node.get("flags", NODE_FLAGS)
+                                      | NODE_PLAY_MODES.index(node["play_mode"])) for node in multi_cell["nodes"])
     count = len(multi_cells["multi_cells"])
     header = struct.pack("<HHIIII", count, BEEF, 20, 20 + 8 * count, 0, 0)
     return [(b"MCBK", pad4(header + table + nodes))] + write_extras(multi_cells)
 
 
-READERS = {"cells": read_cells, "animations": read_animations, "multi_cells": read_multi_cells,
-           "multi_animations": read_animations}
-WRITERS = {"cells": write_cells, "animations": write_animations, "multi_cells": write_multi_cells,
-           "multi_animations": write_animations}
+READERS = {"cells": read_cells, "animations": lambda blocks: read_animations(blocks, 1),
+           "multi_cells": read_multi_cells, "multi_animations": lambda blocks: read_animations(blocks, 2)}
+WRITERS = {"cells": write_cells, "animations": lambda data: write_animations(data, 1),
+           "multi_cells": write_multi_cells, "multi_animations": lambda data: write_animations(data, 2)}
 
 
 def read_nitro(blob: bytes) -> dict:
