@@ -139,9 +139,9 @@ BOOL Scrcmd_Bsubway_CreateWork(VM *vm, FieldScriptEnv *env) {
     ScriptWork *work = FieldScriptEnv_GetScriptWork(env);
     ScriptFieldWork *fieldWork = ScriptWork_GetFieldWork(work);
     GameSystem *gsys = ScriptWork_GetGameSystem(work);
-    u16 a1 = VM_Read16(vm);
+    u16 resume = VM_Read16(vm);
 
-    BsubwayScr_CreateWork(gsys, a1, ScriptReadAny(vm, env));
+    BsubwayScr_CreateWork(gsys, resume, ScriptReadAny(vm, env));
     return FALSE;
 }
 
@@ -567,10 +567,10 @@ BOOL Scrcmd_Bsubway_Tool(VM *vm, FieldScriptEnv *env) {
         *retWk = bsw->playMode;
         break;
     case 311:
-        bsw->unkC_1 = param0;
+        bsw->fixedReward = param0;
         break;
     case 312:
-        *retWk = bsw->unkC_1;
+        *retWk = bsw->fixedReward;
         break;
     case 313:
         *retWk = BsubwayScr_AddBattlePoints(bsw);
@@ -663,10 +663,10 @@ BOOL Scrcmd_Bsubway_Tool(VM *vm, FieldScriptEnv *env) {
         *retWk = bsw->memberSpecies[param0];
         break;
     case 337:
-        bsw->unkC_9 = param0;
+        bsw->useExistingNet = param0;
         break;
     case 338:
-        *retWk = bsw->unkC_9;
+        *retWk = bsw->useExistingNet;
         break;
     case 339: {
         PokeParty *party = NULL;
@@ -706,16 +706,16 @@ BOOL Scrcmd_Bsubway_Tool(VM *vm, FieldScriptEnv *env) {
     case 343: {
         u32 buffer;
 
-        if (bsw->unkC_10 == 0) {
-            bsw->unkC_10 = 1;
+        if (bsw->videoState == 0) {
+            bsw->videoState = 1;
             if (BattleRec_IsSlotValid(save, 4, &buffer, 0) == 1) {
-                bsw->unkC_10 = 2;
+                bsw->videoState = 2;
             }
         }
         break;
     }
     case 344:
-        if (bsw->unkC_10 == 1) {
+        if (bsw->videoState == 1) {
             *retWk = 0;
         } else {
             *retWk = 1;
@@ -727,11 +727,11 @@ BOOL Scrcmd_Bsubway_Tool(VM *vm, FieldScriptEnv *env) {
         BattleRec_UnloadToolOverlay();
         break;
     case 346:
-        bsw->unk7EC = 0;
-        bsw->unk7EE = 0;
-        bsw->unk10 = param0;
+        bsw->videoSeq = 0;
+        bsw->videoSaveSeq = 0;
+        bsw->videoCounter = param0;
         VM_SetNativeCallback(vm, ScriptNative_BSubwayBattleRecSaveWait);
-        bsw->unkC_10 = 2;
+        bsw->videoState = 2;
         result = TRUE;
         break;
     case 347:
@@ -786,8 +786,8 @@ BOOL Scrcmd_Bsubway_Tool(VM *vm, FieldScriptEnv *env) {
         break;
     case 353:
         if (bsw->btlSetup != NULL) {
-            u8 a = bsw->btlSetup->unkD2;
-            u8 b = bsw->btlSetup->unkDB;
+            u8 a = bsw->btlSetup->turnCount;
+            u8 b = bsw->btlSetup->playerFaintedCount;
             int count;
             PokeParty *party = bsw->btlSetup->party[0];
             int i;
@@ -838,7 +838,7 @@ BOOL Scrcmd_Bsubway_Tool(VM *vm, FieldScriptEnv *env) {
         }
         break;
     case 400:
-        if (bsw->unkC_9 == TRUE) {
+        if (bsw->useExistingNet == TRUE) {
             BSubwayComm_AddCommands(bsw);
         } else {
             BSubwayComm_InitNet(bsw);
@@ -849,9 +849,9 @@ BOOL Scrcmd_Bsubway_Tool(VM *vm, FieldScriptEnv *env) {
         result = TRUE;
         break;
     case 402:
-        bsw->unk727 = param0;
-        bsw->unk72A = retWkId;
-        BSubwayComm_SendTiming(bsw->unk727);
+        bsw->timing = param0;
+        bsw->resultVarId = retWkId;
+        BSubwayComm_SendTiming(bsw->timing);
         VM_SetNativeCallback(vm, ScriptNative_BSubwayTimingWait);
         result = TRUE;
         break;
@@ -876,7 +876,7 @@ BOOL Scrcmd_Bsubway_Tool(VM *vm, FieldScriptEnv *env) {
         break;
     case 406:
         BSubwayComm_SetRecvMode(bsw, param0);
-        bsw->unk72A = retWkId;
+        bsw->resultVarId = retWkId;
         VM_SetNativeCallback(vm, ScriptNative_BSubwayRecvWait);
         result = TRUE;
         break;
@@ -935,7 +935,7 @@ BOOL Scrcmd_Bsubway_Tool(VM *vm, FieldScriptEnv *env) {
         break;
     case 416:
         *retWk = FALSE;
-        if (bsw->btlSetup != NULL && BattleRec_IsVersionSupported(bsw->btlSetup->unkAD) == TRUE) {
+        if (bsw->btlSetup != NULL && BattleRec_IsVersionSupported(bsw->btlSetup->commonVersion) == TRUE) {
             *retWk = TRUE;
         }
         break;
@@ -962,13 +962,13 @@ static BOOL ScriptNative_BSubwayTimingWait(VM *vm, void *env) {
     ScriptWork *work = FieldScriptEnv_GetScriptWork(env);
     GameData *gameData = GSYS_GetGameData(ScriptWork_GetGameSystem(work));
     BSubwayScrWork *bsw = GameData_GetBSubwayScrWork(gameData);
-    u16 *var = ScriptWork_GetWkAddr(work, gameData, bsw->unk72A);
+    u16 *var = ScriptWork_GetWkAddr(work, gameData, bsw->resultVarId);
 
     if (GFL_NetErrCheck()) {
         *var = 0;
         return TRUE;
     }
-    if (BSubwayComm_IsTimingRecv(bsw->unk727) == TRUE) {
+    if (BSubwayComm_IsTimingRecv(bsw->timing) == TRUE) {
         *var = 1;
         return TRUE;
     }
@@ -1037,26 +1037,32 @@ static BOOL ScriptNative_BSubwayRecvWait(VM *vm, void *env) {
     GameData *gameData = GSYS_GetGameData(ScriptWork_GetGameSystem(work));
     BSubwayScrWork *bsw = GameData_GetBSubwayScrWork(gameData);
 
-    if (BSubwayComm_CheckRecv(bsw, ScriptWork_GetWkAddr(work, gameData, bsw->unk72A)) == TRUE) {
+    if (BSubwayComm_CheckRecv(bsw, ScriptWork_GetWkAddr(work, gameData, bsw->resultVarId)) == TRUE) {
         return TRUE;
     }
     return FALSE;
 }
 
+enum {
+    STEP_REMOVE_COMMANDS,
+    STEP_EXIT_NET,
+    STEP_WAIT_NET_END,
+};
+
 static GameEventReturnCode EventBSubwayCommEnd_Callback(GameEvent *event, u32 *state, void *data) {
     BSubwayScrWork **bsw = data;
 
     switch (*state) {
-    case 0:
+    case STEP_REMOVE_COMMANDS:
         if (GFL_NetIsParent() == TRUE) {
             GFL_NetSetDisconnectError(FALSE);
         }
-        if ((*bsw)->unkC_9 == TRUE) {
+        if ((*bsw)->useExistingNet == TRUE) {
             BSubwayComm_RemoveCommands(*bsw);
         }
         (*state)++;
         break;
-    case 1:
+    case STEP_EXIT_NET:
         if (GFL_NetIsParent() == TRUE) {
             if (GFL_NetGetNegotiatedCount() <= 1) {
                 GFL_NetExit(0);
@@ -1067,7 +1073,7 @@ static GameEventReturnCode EventBSubwayCommEnd_Callback(GameEvent *event, u32 *s
             (*state)++;
         }
         break;
-    case 2:
+    case STEP_WAIT_NET_END:
         if (GFL_NetIsEnded() == TRUE) {
             return GAMEEVENT_DONE;
         }
@@ -1084,22 +1090,29 @@ static GameEvent *EventBSubwayCommEnd_Create(GameSystem *gsys, BSubwayScrWork *b
     return event;
 }
 
+enum {
+    STEP_SET_WAIT,
+    STEP_OPEN_YES_NO,
+    STEP_WAIT_YES_NO,
+    STEP_CLOSE_MENU,
+};
+
 static GameEventReturnCode EventBSubwayMsgWindow_Callback(GameEvent *event, u32 *state, void *data) {
     BSubwayMsgEvent *wk = data;
     ScriptWork *work = FieldScriptEnv_GetScriptWork(wk->env);
 
     switch (*state) {
-    case 0:
+    case STEP_SET_WAIT:
         FieldScriptEnv_SetWaitCounter(wk->env, 1);
         (*state)++;
-    case 1:
+    case STEP_OPEN_YES_NO:
         if (FieldScriptEnv_UpdateWaitCounter(wk->env) == TRUE) {
             wk->window = MsgBGPrinter_CreateYesNoMenu(
                 Field_GetMsgBGSys(GSYS_GetField(FieldScriptEnv_GetGameSystem(wk->env))), wk->message);
             (*state)++;
         }
         break;
-    case 2:
+    case STEP_WAIT_YES_NO:
         switch (MsgBGPrinter_YesNoMenuMain(wk->window)) {
         case 0:
             *wk->var = 0;
@@ -1113,7 +1126,7 @@ static GameEventReturnCode EventBSubwayMsgWindow_Callback(GameEvent *event, u32 
             break;
         }
         break;
-    case 3:
+    case STEP_CLOSE_MENU:
         MsgBGPrinter_DeleteMenuFunc(wk->window);
         return GAMEEVENT_DONE;
     }
@@ -1240,7 +1253,7 @@ static BOOL ScriptNative_BSubwayBattleRecSaveWait(VM *vm, void *env) {
     GameData *gameData = GSYS_GetGameData(ScriptWork_GetGameSystem(FieldScriptEnv_GetScriptWork(env)));
     BSubwayScrWork *bsw = GameData_GetBSubwayScrWork(gameData);
     u32 regulation = 20;
-    int count = bsw->unk10;
+    int count = bsw->videoCounter;
     u32 result;
 
     switch (bsw->playMode) {
@@ -1258,7 +1271,7 @@ static BOOL ScriptNative_BSubwayBattleRecSaveWait(VM *vm, void *env) {
     if (count > BSUBWAY_COUNT_MAX) {
         count = BSUBWAY_COUNT_MAX;
     }
-    result = BattleRec_FinishAndSaveSlot(gameData, 4, regulation, count, 0, &bsw->unk7EC, &bsw->unk7EE);
+    result = BattleRec_FinishAndSaveSlot(gameData, 4, regulation, count, 0, &bsw->videoSeq, &bsw->videoSaveSeq);
     if (result == 2 || result == 3) {
         return TRUE;
     }

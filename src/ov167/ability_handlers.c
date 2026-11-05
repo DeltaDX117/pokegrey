@@ -335,7 +335,7 @@ void HandlerIntimidateMemberIn(BattleEventItem *item, BtlServerFlow *flow, u8 mo
             param = BattleHandler_PushWork(flow, BTL_HANDLER_STAT_CHANGE, monId);
             param->stat = 1;
             param->change = -1;
-            param->unk0e = 1;
+            param->showFail = 1;
             param->count = count;
             for (i = 0; i < count; i++) {
                 param->monIds[i] = mons[i];
@@ -379,7 +379,7 @@ void HandlerSteadfast(BattleEventItem *item, BtlServerFlow *flow, u8 monId, s32 
             param->popup = 1;
             param->stat = 5;
             param->change = 1;
-            param->unk0e = 0;
+            param->showFail = 0;
             param->count = 1;
             param->monIds[0] = monId;
             BattleHandler_PopWork(flow, param);
@@ -905,7 +905,7 @@ BOOL CheckAllyHasAbility(BtlServerFlow *flow, u8 monId, u8 *mons, u32 ability) {
 
     pos = BtlServerFlow_MonIDToPos(flow, monId);
     if (pos != BTL_POS_NONE) {
-        packed = (7 << 8) | pos;
+        packed = BTL_EXPOS_FLAGS(BTL_EXPOS_ALL_SIDE, pos);
         count = HandlerGetAlivePartyCount(flow, packed, mons);
         for (i = 0; i < count; i++) {
             if (monId != mons[i] &&
@@ -1838,7 +1838,7 @@ void HandlerHydration(BattleEventItem *item, BtlServerFlow *flow, u8 monId, s32 
                 param->condition = CONDITION_ANY_STATUS;
                 param->monIds[0] = monId;
                 param->count = 1;
-                param->unk25 = 1;
+                param->checkFainted = 1;
                 BattleHandler_PopWork(flow, param);
                 BattleHandler_PushRun(flow, BTL_HANDLER_ABILITY_POPUP_REMOVE, monId);
             }
@@ -1865,7 +1865,7 @@ void HandlerShedSkin(BattleEventItem *item, BtlServerFlow *flow, u8 monId, s32 *
             if (AbilityEvent_RollEffectChance(flow, 0x21)) {
                 param = BattleHandler_PushWork(flow, BTL_HANDLER_CURE_CONDITION, monId);
                 param->popup = 1;
-                param->unk25 = 1;
+                param->checkFainted = 1;
                 param->condition = CONDITION_ANY_STATUS;
                 param->monIds[0] = monId;
                 param->count = 1;
@@ -1958,7 +1958,7 @@ void HandlerAngerPoint(BattleEventItem *item, BtlServerFlow *flow, u8 monId, s32
                     param->stat = 1;
                     amount = BattleMon_GetStatRaiseRoom(mon, 1);
                     param->change = amount;
-                    param->unk0e = 1;
+                    param->showFail = 1;
                     param->count = 1;
                     param->monIds[0] = monId;
                     param->flag = 1;
@@ -2289,7 +2289,7 @@ void HandlerTrace(BattleEventItem *item, BtlServerFlow *flow, u8 monId, s32 *wor
     u8 candidates[3];
 
     enteringId = BattleEventVar_GetValue(BTL_EVAR_MON);
-    targetId = 0x1f;
+    targetId = BTL_MONID_NONE;
     ability = 0;
     if (enteringId == monId) {
         myPos = BtlServerFlow_GetMonBattlePos(flow, monId);
@@ -2731,7 +2731,7 @@ void CommonTypeNoEffectRankUp(BtlServerFlow *flow, u8 monId, u32 stat, u32 amoun
         work = BattleHandler_PushWork(flow, BTL_HANDLER_STAT_CHANGE, monId);
         work->count = 1;
         work->monIds[0] = monId;
-        work->unk0e = 1;
+        work->showFail = 1;
         work->stat = stat;
         work->change = amount;
         work->popup = 1;
@@ -3876,7 +3876,7 @@ void HandlerPickup(BattleEventItem *item, BtlServerFlow *flow, u8 monId, s32 *wo
     if (BattleEventVar_GetValue(BTL_EVAR_MON) == monId && GetBattleMonHeldItem(GetBattleMon(flow, monId)) == 0) {
         pos = BtlServerFlow_GetMonBattlePos(flow, monId);
         wk = (PickupWork *)BtlServerFlow_GetHandlerWork(flow, 0xe);
-        wk->count = HandlerGetAlivePartyCount(flow, (2 << 8) | pos, wk->mons);
+        wk->count = HandlerGetAlivePartyCount(flow, BTL_EXPOS_FLAGS(BTL_EXPOS_ADJACENT_OTHERS, pos), wk->mons);
         numCandidates = 0;
         wk->numCandidates = 0;
         for (i = 0; i < wk->count; i++) {
@@ -3994,14 +3994,14 @@ void HandlerWeakArmor(BattleEventItem *item, BtlServerFlow *flow, u8 monId, s32 
             param = BattleHandler_PushWork(flow, BTL_HANDLER_STAT_CHANGE, monId);
             param->count = 1;
             param->monIds[0] = monId;
-            param->unk0e = 1;
+            param->showFail = 1;
             param->stat = 2;
             param->change = -1;
             BattleHandler_PopWork(flow, param);
             param = BattleHandler_PushWork(flow, BTL_HANDLER_STAT_CHANGE, monId);
             param->count = 1;
             param->monIds[0] = monId;
-            param->unk0e = 1;
+            param->showFail = 1;
             param->stat = 5;
             param->change = 1;
             BattleHandler_PopWork(flow, param);
@@ -4103,7 +4103,7 @@ void HandlerDefiant(BattleEventItem *item, BtlServerFlow *flow, u8 monId, s32 *w
             param->popup = 1;
             param->stat = 1;
             param->change = 2;
-            param->unk0e = 1;
+            param->showFail = 1;
             param->count = 1;
             param->monIds[0] = monId;
             BattleHandler_PopWork(flow, param);
@@ -4182,13 +4182,14 @@ void HandlerHealer(BattleEventItem *item, BtlServerFlow *flow, u8 monId, s32 *wo
     u8 mons[4];
 
     if (BattleEventVar_GetValue(BTL_EVAR_MON) == monId) {
-        count = HandlerGetAlivePartyCount(flow, (2 << 9) | BtlServerFlow_MonIDToPos(flow, monId), mons);
+        count = HandlerGetAlivePartyCount(
+            flow, BTL_EXPOS_FLAGS(BTL_EXPOS_ADJACENT_ALLIES, BtlServerFlow_MonIDToPos(flow, monId)), mons);
         for (i = 0; i < count; i++) {
             if (mons[i] != monId && GetBattleMonStatus(GetBattleMon(flow, mons[i])) != 0 &&
                 AbilityEvent_RollEffectChance(flow, 30)) {
                 param = BattleHandler_PushWork(flow, BTL_HANDLER_CURE_CONDITION, monId);
                 param->popup = 1;
-                param->unk25 = 1;
+                param->checkFainted = 1;
                 param->count = 1;
                 param->monIds[0] = mons[i];
                 param->condition = CONDITION_ANY_STATUS;

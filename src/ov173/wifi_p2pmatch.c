@@ -427,7 +427,7 @@ typedef struct {
     // The frames left for a called friend to answer
     s32 callTimer;
     // The frames the player has been in the room since the last connection
-    s32 unk1C8;
+    s32 roomFrames;
     // The state: an index of sWifiP2PMatchSeqFuncs
     int seq;
     // What the proc returns to event_wificlub.c (WifiClubData.mode)
@@ -450,7 +450,7 @@ typedef struct {
     u16 friendNo;
     u16 unk244;
     // What the player chose in the game mode menu
-    u16 unk246;
+    u16 gameModeChoice;
     WifiClubData *parent;
     // A copy of the partner's status
     WIFI_STATUS targetStatus;
@@ -1544,7 +1544,7 @@ static void WifiP2PMatch_OpenBattleRulesMenu(WIFIP2PMATCH_WORK *wk, BOOL fromPar
     } else {
         sWifiP2PMatchBattleRulesOptions[0].msg = WifiP2pmatch_Text_BattleFormatSingleBattle + wk->battleMode;
         sWifiP2PMatchBattleRulesOptions[1].msg = WifiP2pmatch_Text_BattleRuleNoRestrictions + wk->battleRule;
-        sWifiP2PMatchBattleRulesOptions[2].msg = WifiP2pmatch_Text_WonderLauncherOff_2 - wk->parent->unk48;
+        sWifiP2PMatchBattleRulesOptions[2].msg = WifiP2pmatch_Text_WonderLauncherOff_2 - wk->parent->launcher;
     }
     WifiP2PMatch_OpenListMenu(wk, &sWifiP2PMatchBattleRulesMenuHeader, sWifiP2PMatchBattleRulesOptions, 6,
                               WIFIP2PMATCH_MENU_BATTLE_RULES, 30);
@@ -2406,7 +2406,7 @@ static u32 WifiP2PMatch_LoadRegulation(WIFIP2PMATCH_WORK *wk, int which) {
     default:
         battleMode = wk->battleMode;
         battleRule = wk->battleRule;
-        shooter = wk->parent->unk48;
+        shooter = wk->parent->launcher;
         break;
     case 1:
         battleMode = wk->parent->battleMode;
@@ -2433,7 +2433,7 @@ static u32 WifiP2PMatch_LoadMyRegulation(WIFIP2PMATCH_WORK *wk) {
 static void WifiP2PMatch_SetRegulationCode(WIFIP2PMATCH_WORK *wk, u32 regulationCode) {
     int i;
 
-    wk->parent->unk48 = (regulationCode & 0x80000000) ? TRUE : FALSE;
+    wk->parent->launcher = (regulationCode & 0x80000000) ? TRUE : FALSE;
     regulationCode &= 0xfffffff;
     for (i = 0; i < NELEMS(sWifiP2PMatchRegulationFiles); i++) {
         if (regulationCode == sWifiP2PMatchRegulationFiles[i]) {
@@ -2484,7 +2484,7 @@ static int WifiP2PMatch_StateRegulationFailParty(WIFIP2PMATCH_WORK *wk, int seq)
         if (wk->result == 3 || wk->result == 1) {
             WifiP2PMatch_DrawRulesWindow(wk, flags, wk->parent->unk20, 2);
         } else {
-            WifiP2PMatch_DrawRulesWindow(wk, flags, wk->parent->unk48, 2);
+            WifiP2PMatch_DrawRulesWindow(wk, flags, wk->parent->launcher, 2);
         }
         wk->seq = WIFIP2PMATCH_SEQ_REGULATION_FAIL_BATTLE_BOX;
     }
@@ -2502,7 +2502,7 @@ static int WifiP2PMatch_StateRegulationFailBattleBox(WIFIP2PMATCH_WORK *wk, int 
             if (wk->result == 3 || wk->result == 1) {
                 WifiP2PMatch_DrawRulesWindow(wk, flags, wk->parent->unk20, 3);
             } else {
-                WifiP2PMatch_DrawRulesWindow(wk, flags, wk->parent->unk48, 3);
+                WifiP2PMatch_DrawRulesWindow(wk, flags, wk->parent->launcher, 3);
             }
             wk->seq = WIFIP2PMATCH_SEQ_REGULATION_FAIL_END;
         } else {
@@ -2573,7 +2573,7 @@ static int WifiP2PMatch_StateRulesShowWait(WIFIP2PMATCH_WORK *wk, int seq) {
 static int WifiP2PMatch_StateBattleOfferShow(WIFIP2PMATCH_WORK *wk, int seq) {
     if (!GFL_NetIsParent()) {
         WifiP2PMatch_LoadMyRegulation(wk);
-        WifiP2PMatch_DrawRulesWindow(wk, 0, wk->parent->unk48, 1);
+        WifiP2PMatch_DrawRulesWindow(wk, 0, wk->parent->launcher, 1);
         WifiP2PMatch_SetFriendNameWord(wk, wk->friendNo - 1);
         WifiP2PMatch_PrintMessageCore(wk, WifiP2pmatch_Text_WillHaveSingleBattle + wk->battleMode + wk->battleRule * 4,
                                       FALSE, TRUE);
@@ -2868,7 +2868,7 @@ static int WifiP2PMatch_StatePartyMenuFailParty(WIFIP2PMATCH_WORK *wk, int seq) 
     if (GCTX_HIDGetPressedKeys()) {
         WifiP2PMatch_EndMessage(wk);
         WifiP2PMatch_CheckParty(wk->regulation, wk->gameData, &flags);
-        WifiP2PMatch_DrawRulesWindow(wk, flags, wk->parent->unk48, 2);
+        WifiP2PMatch_DrawRulesWindow(wk, flags, wk->parent->launcher, 2);
         wk->seq = WIFIP2PMATCH_SEQ_PARTY_MENU_FAIL_END;
     }
     return seq;
@@ -2884,7 +2884,7 @@ static int WifiP2PMatch_StatePartyMenuFailBattleBox(WIFIP2PMATCH_WORK *wk, int s
     if (GCTX_HIDGetPressedKeys()) {
         WifiP2PMatch_EndMessage(wk);
         WifiP2PMatch_CheckBattleBoxParty(wk->regulation, wk->battleBoxParty, &flags);
-        WifiP2PMatch_DrawRulesWindow(wk, flags, wk->parent->unk48, 3);
+        WifiP2PMatch_DrawRulesWindow(wk, flags, wk->parent->launcher, 3);
         wk->seq = WIFIP2PMATCH_SEQ_PARTY_MENU_FAIL_END;
     }
     return seq;
@@ -4511,8 +4511,8 @@ static int WifiP2PMatch_StateRoom(WIFIP2PMATCH_WORK *wk, int seq) {
         return seq;
     }
     if (wk->preConnect != -1) {
-        wk->unk1C8++;
-        if (wk->unk1C8 > 60 * 60) {
+        wk->roomFrames++;
+        if (wk->roomFrames > 60 * 60) {
             NetState_RecordError(0, 0, 0, 0x3f1);
             return seq;
         }
@@ -4590,7 +4590,7 @@ static int WifiP2PMatch_StateRoom(WIFIP2PMATCH_WORK *wk, int seq) {
         if (wk->unk1351 == 0) {
             WifiP2PMatch_PrintMessage(wk, WifiP2pmatch_Text_WantsJoin, FALSE);
         }
-        wk->unk1C8 = 0;
+        wk->roomFrames = 0;
     } else if (wk->preConnect != -1 && DWCRap_GetLastNetId() == -1) {
         DWCRap_SetVoiceChatEnabled(0);
         WIFI_STATUS_SetUseVChat(wk->myStatus, WIFI_STATUS_GetVChatStatus(wk->myStatus));
@@ -4669,8 +4669,8 @@ static int WifiP2PMatch_StateRoomMessage(WIFIP2PMATCH_WORK *wk, int seq) {
     u32 ret = WIFI_MCR_RET_NONE;
 
     if (wk->preConnect != -1) {
-        wk->unk1C8++;
-        if (wk->unk1C8 > 60 * 60) {
+        wk->roomFrames++;
+        if (wk->roomFrames > 60 * 60) {
             NetState_RecordError(0, 0, 0, 0x3f1);
             return seq;
         }
@@ -4699,7 +4699,7 @@ static int WifiP2PMatch_StateRoomMessage(WIFIP2PMATCH_WORK *wk, int seq) {
         if (wk->unk1351 == 0) {
             WifiP2PMatch_PrintMessage(wk, WifiP2pmatch_Text_WantsJoin, FALSE);
         }
-        wk->unk1C8 = 0;
+        wk->roomFrames = 0;
     } else if (DWCRap_GetLastIndex() != -1) {
         WifiP2PMatch_SetFriendNameWord(wk, DWCRap_GetLastIndex());
         WifiP2PMatch_PrintMessage(wk, WifiP2pmatch_Text_FailedRespond, FALSE);
@@ -5210,7 +5210,7 @@ static int WifiP2PMatch_StateRecruitMenu(WIFIP2PMATCH_WORK *wk, int seq) {
         WifiP2PMatch_FreeRecruitMenu(wk);
         wk->battleMode = wk->parent->battleMode;
         wk->battleRule = wk->parent->battleRule;
-        wk->parent->unk48 = wk->parent->unk20;
+        wk->parent->launcher = wk->parent->unk20;
         WifiP2PMatch_OpenBattleRulesMenu(wk, TRUE);
         wk->seq = WIFIP2PMATCH_SEQ_BATTLE_SETUP_MENU;
         return seq;
@@ -5253,7 +5253,7 @@ static int WifiP2PMatch_StateRecruitMenu(WIFIP2PMATCH_WORK *wk, int seq) {
     }
     WifiP2PMatch_RoomPause(wk, TRUE);
     wk->timer = 0;
-    wk->unk246 = ret;
+    wk->gameModeChoice = ret;
     wk->seq = WIFIP2PMATCH_SEQ_RECRUIT_START;
     return seq;
 }
@@ -5261,7 +5261,7 @@ static int WifiP2PMatch_StateRecruitMenu(WIFIP2PMATCH_WORK *wk, int seq) {
 static int WifiP2PMatch_StateRecruitStart(WIFIP2PMATCH_WORK *wk, int seq) {
     wk->timer--;
     if (wk->timer < 0) {
-        WifiP2PMatch_ChangeMyStatus(wk, WIFIP2PMATCH_STATUS_RECRUIT, wk->unk246);
+        WifiP2PMatch_ChangeMyStatus(wk, WIFIP2PMATCH_STATUS_RECRUIT, wk->gameModeChoice);
         wk->seq = WIFIP2PMATCH_SEQ_ROOM_MESSAGE;
     }
     return seq;

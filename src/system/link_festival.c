@@ -175,7 +175,7 @@ void LinkFestival_StartMission(LinkFestival *festival, const FestMissionConfig *
     GameData_SetFunfestMission(festival->gameData, TRUE);
 }
 
-void LinkFestival_StartTimer(LinkFestival *festival, u32 arg1) {
+void LinkFestival_StartTimer(LinkFestival *festival, u32 unused) {
     if (isFesMissionAvailable(&festival->config)) {
         if (festival->config.startSeconds == -1) {
             FestMissionConfig_StartTimer(&festival->config);
@@ -283,7 +283,7 @@ BOOL LinkFestival_IsMissionOver(LinkFestival *festival) {
         return FALSE;
     }
     seconds = LinkFestival_GetSecondsLeft(festival);
-    if (LinkFestival_IsTargetReached(festival, &total) && festival->info->unk4_31 == TRUE) {
+    if (LinkFestival_IsTargetReached(festival, &total) && festival->info->endsAtTarget == TRUE) {
         over = TRUE;
     } else {
         over = TRUE;
@@ -293,14 +293,14 @@ BOOL LinkFestival_IsMissionOver(LinkFestival *festival) {
     }
     if (over) {
         LinkFestival_SetState(festival, 3);
-        festival->config.unk20 = seconds;
+        festival->config.secondsLeftAtEnd = seconds;
     }
     return over;
 }
 
-u32 LinkFestival_AddMissionScore(GameSystem *gsys, u32 a1, u32 a2) {
+u32 LinkFestival_AddMissionScore(GameSystem *gsys, u32 kind, u32 value) {
     LinkFestival *festival = GSYS_GetLinkFestival(gsys);
-    BOOL result = FestMissionConfig_AddScore(&festival->config, a1, a2, 1);
+    BOOL result = FestMissionConfig_AddScore(&festival->config, kind, value, 1);
 
     if (result) {
         LinkFestival_UpdateBest(festival, 0, festival->config.missionId, NULL);
@@ -489,12 +489,12 @@ static BOOL LinkFestival_HasRecord(LinkFestival *festival, FestMissionConfig *co
 }
 
 static void FestMissionRecord_Set(FestMissionRecord *record, const FestMissionConfig *config) {
-    record->mission.unk4 = config->seed;
+    record->mission.seed = config->seed;
     record->mission.unk0 = config->unk00[0];
 }
 
 static BOOL FestMissionRecord_Matches(const FestMissionRecord *record, const FestMissionConfig *config) {
-    if (record->mission.unk4 != config->seed || record->mission.unk0 != config->unk00[0]) {
+    if (record->mission.seed != config->seed || record->mission.unk0 != config->unk00[0]) {
         return FALSE;
     }
     return TRUE;

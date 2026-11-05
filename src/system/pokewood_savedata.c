@@ -45,7 +45,7 @@ static u32 *getFlagList(PokewoodSave *save, u32 list) {
     case 0:
         return save->unlockedMovies;
     case 1:
-        return save->flags1;
+        return save->filmedMovies;
     case 2:
         return save->flags2;
     case 3:
@@ -86,11 +86,11 @@ static void PokewoodSave_UnlockMovie(PokewoodSave *save, u32 movie) {
     PokewoodSave_SetFlag(save, 0, movie);
 }
 
-BOOL func_02011118(PokewoodSave *save, u32 movie) {
+BOOL PokewoodSave_IsMovieFilmed(PokewoodSave *save, u32 movie) {
     return PokewoodSave_CheckFlag(save, 1, movie);
 }
 
-void func_02011124(PokewoodSave *save, u32 movie) {
+void PokewoodSave_SetMovieFilmed(PokewoodSave *save, u32 movie) {
     PokewoodSave_SetFlag(save, 1, movie);
 }
 
@@ -115,12 +115,12 @@ PokewoodRecord *PokewoodSave_GetRecord(PokewoodSave *save, u32 movie) {
     return &save->records[movie];
 }
 
-u8 func_020111a0(PokewoodSave *save, u32 slot) {
-    return save->slots[slot];
+u8 PokewoodSave_IsSlotWatched(PokewoodSave *save, u32 slot) {
+    return save->slotWatched[slot];
 }
 
-void func_020111a8(PokewoodSave *save, u32 slot, u8 value) {
-    save->slots[slot] = value;
+void PokewoodSave_SetSlotWatched(PokewoodSave *save, u32 slot, u8 value) {
+    save->slotWatched[slot] = value;
 }
 
 s16 PokewoodSave_GetLevelPoints(PokewoodSave *save) {
@@ -169,7 +169,7 @@ u8 PokewoodSave_GetLastSeries(PokewoodSave *save, u32 index) {
     return save->lastSeries[index];
 }
 
-void PokewoodSave_PushLastSeries(PokewoodSave *save, u32 a1, u32 a2, u8 *a3) {
+void PokewoodSave_PushLastSeries(PokewoodSave *save, u32 slot, u32 series, u8 *slotSeries) {
     int i;
     int j;
     int count;
@@ -177,12 +177,12 @@ void PokewoodSave_PushLastSeries(PokewoodSave *save, u32 a1, u32 a2, u8 *a3) {
     save->lastSeries[3] = save->lastSeries[2];
     save->lastSeries[2] = save->lastSeries[1];
     save->lastSeries[1] = save->lastSeries[0];
-    save->lastSeries[0] = a2;
-    a3[a1] = 0;
+    save->lastSeries[0] = series;
+    slotSeries[slot] = 0;
     for (i = 1; i < POKEWOOD_LAST_SERIES_COUNT; i++) {
         count = 0;
         for (j = 0; j < POKEWOOD_SLOT_COUNT; j++) {
-            if (save->lastSeries[i] == a3[j]) {
+            if (save->lastSeries[i] == slotSeries[j]) {
                 count++;
             }
         }

@@ -86,7 +86,7 @@ BOOL PStatus_Init(PStatusWork *wk) {
     u8 i;
 
     wk->partyIndex = wk->param->partyIndex;
-    wk->shownPartyIndex = 0xff;
+    wk->shownPartyIndex = PSTATUS_PARTY_INDEX_NONE;
     wk->bgScrollFrames = 0;
     wk->lastVBlankCount = OS_GetVBlankCount();
     wk->shownPage = PSTA_PAGE_NONE;
@@ -321,7 +321,7 @@ static void PStatus_InitGraphics(PStatusWork *wk) {
     G2x_SetBlendAlpha_(REG_BLDCNT_ADDR, GX_PLANEMASK_BG2,
                        GX_PLANEMASK_BG1 | GX_PLANEMASK_BG2 | GX_PLANEMASK_BG3 | GX_PLANEMASK_OBJ, 13, 16);
     G2x_SetBlendAlpha_(REG_DB_BLDCNT_ADDR, GX_PLANEMASK_BG2, GX_PLANEMASK_BG3, 13, 16);
-    clactSetup = data_02093f08;
+    clactSetup = gClActSysSetupSplitScreens;
     clactSetup.charCount = 110;
     ClActSys_Create(&clactSetup, &sPStatusVRAMConfig, wk->heapId);
     wk->actorUnit = ClActUnit_Create(96, 0, wk->heapId);
@@ -972,7 +972,7 @@ static void PStatus_LoadPokemon(PStatusWork *wk) {
 static void PStatus_StartRedraw(PStatusWork *wk) {
     PStatus_SetDecrypted(wk, TRUE);
     if (wk->shownPartyIndex != wk->partyIndex) {
-        if (wk->shownPartyIndex != 0xff) {
+        if (wk->shownPartyIndex != PSTATUS_PARTY_INDEX_NONE) {
             PStaSub_Unload(wk, wk->sub);
             PStaRibbon_UnloadPokemon(wk, wk->ribbon);
         }
@@ -1047,7 +1047,7 @@ static void PStatus_UpdateRedraw(PStatusWork *wk) {
         return;
     }
     if (wk->shownPartyIndex != wk->partyIndex) {
-        if (wk->shownPartyIndex != 0xff) {
+        if (wk->shownPartyIndex != PSTATUS_PARTY_INDEX_NONE) {
             PStaSub_Clear(wk, wk->sub);
         }
         PStaSub_Draw(wk, wk->sub);

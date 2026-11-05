@@ -25,15 +25,25 @@ enum {
     REGULATION_PARAM_REQUIRED_FORM,
     REGULATION_PARAM_LAUNCHER,
     // A bit array as well
-    REGULATION_PARAM_BITS_AC,
-    REGULATION_PARAM_15,
-    REGULATION_PARAM_16,
+    REGULATION_PARAM_SHOOTER_DISABLED_ITEMS,
+    REGULATION_PARAM_GAME_TIME_LIMIT,
+    REGULATION_PARAM_COMMAND_TIME_LIMIT,
     REGULATION_PARAM_ALLOW_NICKNAMES,
-    REGULATION_PARAM_18,
+    // The battle view's idle effects (idleEffects)
+    REGULATION_PARAM_IDLE_EFFECTS,
     REGULATION_PARAM_SHOW_PARTNERS,
     REGULATION_PARAM_TIME_LIMIT,
     REGULATION_PARAM_BATTLE_TYPE,
     REGULATION_PARAM_MAX_BATTLES
+};
+
+// The battle a regulation is for (battleType), in the order of the regulation data's battle_type
+enum {
+    REGULATION_BATTLE_SINGLE,
+    REGULATION_BATTLE_DOUBLE,
+    REGULATION_BATTLE_TRIPLE,
+    REGULATION_BATTLE_ROTATION,
+    REGULATION_BATTLE_MULTI,
 };
 
 struct Regulation {
@@ -58,12 +68,17 @@ struct Regulation {
     u8 requiredForm;
     // The Wonder Launcher: 2 leaves it to the players
     u8 launcher;
-    u8 unkAC[0x7];
-    u8 unkB3;
-    u8 unkB4;
+    // A bit for each Shooter item that can't be used (ShooterItem_IsEnabled)
+    u8 shooterDisabledItems[0x7];
+    // The battle's time limit and each turn's command time limit, which the battle setup multiplies by 60
+    u8 gameTimeLimit;
+    u8 commandTimeLimit;
     // Whether nicknames are kept
     u8 allowNicknames;
-    u8 unkB6;
+    // The battle view's idle effects, which only downloaded tournaments set: bit 0 starts them sooner and bit 1 plays
+    // them while a message waits (BTL_SETUP_FLAG_SHORT_IDLE_WAIT, BTL_SETUP_FLAG_MSG_IDLE_EFFECTS), and moves a
+    // Wi-Fi tournament to the stage that the World Championships use (wifibattlematch_sys.c)
+    u8 idleEffects;
     u8 unkB7;
     // Whether the partners' teams are shown in the selection, and its time limit
     u8 showPartners;
@@ -75,9 +90,9 @@ struct Regulation {
 
 // What Regulation_GetShooterSettings fills in from a regulation
 typedef struct {
-    u8 unk0[0x7];
+    u8 disabledItems[0x7];
     u8 launcher;
-} RegulationUnkAC;
+} RegulationShooterSettings;
 
 // The rules of a battle, such as the level cap
 Regulation *Regulation_Create(HeapID heapId);
@@ -88,7 +103,7 @@ StrBuf *makeStrbufLoadBattleTypeText(Regulation *regulation, HeapID heapId);
 u32 Regulation_GetParam(Regulation *regulation, u32 param);
 // Whether a bit of one of the regulation's bit arrays is set
 BOOL Regulation_CheckParamBit(Regulation *regulation, u32 param, int index);
-void Regulation_GetShooterSettings(Regulation *regulation, RegulationUnkAC *out);
+void Regulation_GetShooterSettings(Regulation *regulation, RegulationShooterSettings *out);
 // poke_regulation.c, which the ROM names: checks of Pokémon and parties against a regulation. Names are not swan's
 
 // What a party fails a regulation by, which PokeRegulation_CheckPicked, PokeRegulation_CheckPartyCanEnter and

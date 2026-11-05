@@ -156,7 +156,7 @@ BOOL PokeList_Init(PokeListWork *wk) {
     wk->demo = 0;
     wk->timeUp = FALSE;
     wk->unk284 = FALSE;
-    wk->param->unk73 = 0;
+    wk->param->forceExit = 0;
     wk->unk28 = TRUE;
     wk->playHealSe = FALSE;
     for (i = 0; i < POKELIST_CL_RES_COUNT; i++) {
@@ -506,7 +506,7 @@ static void PokeList_InitGraphics(PokeListWork *wk) {
     G2x_SetBlendAlpha_(REG_DB_BLDCNT_ADDR, GX_PLANEMASK_BG2, GX_PLANEMASK_BG3, 16, 10);
     GFL_BGSysMoveBG(2, BG_MOVE_SET_X, 128);
     GFL_BGSysMoveBG(1, BG_MOVE_SET_X, 128);
-    clactSetup = data_02093f08;
+    clactSetup = gClActSysSetupSplitScreens;
     ClActSys_Create(&clactSetup, &vramConfig, wk->heapId);
     GFL_BGSysSetBGEnabledA(GX_PLANEMASK_OBJ, TRUE);
     GFL_BGSysSetBGEnabledB(GX_PLANEMASK_OBJ, TRUE);
@@ -964,7 +964,7 @@ static void PokeList_ShowModeMessage(PokeListWork *wk) {
 
 // A Pokémon was picked: what happens depends on the mode
 static void PokeList_SelectPokemon(PokeListWork *wk) {
-    if (wk->param->unk73 == 1) {
+    if (wk->param->forceExit == 1) {
         wk->state = 19;
         return;
     }
@@ -1761,7 +1761,7 @@ static void func_ov165_0219c7e8(PokeListWork *wk) {
     if (wk->input != 4) {
         wk->subState = 2;
     }
-    if (wk->param->unk73 == 1) {
+    if (wk->param->forceExit == 1) {
         wk->subState = 2;
         wk->input = 1;
     }
@@ -2070,7 +2070,7 @@ static void PokeList_UpdateMenu(PokeListWork *wk) {
             wk->menuItem = item;
             wk->subState = 2;
         }
-        if (wk->param->unk73 == 1) {
+        if (wk->param->forceExit == 1) {
             wk->subState = 2;
         }
         break;
@@ -2119,7 +2119,7 @@ static void func_ov165_0219cf70(PokeListWork *wk) {
 
 // Does what the menu item picked does
 static void PokeList_DoMenuItem(PokeListWork *wk) {
-    if (wk->param->unk73 == 1) {
+    if (wk->param->forceExit == 1) {
         wk->state = 19;
         return;
     }

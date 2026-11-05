@@ -46,8 +46,8 @@ void HighLinkSave_SetPassPower(HighLinkSave *save, u32 passPower, int index);
 u32 HighLinkSave_GetPassPower(HighLinkSave *save, int index);
 // Sets the flag of a special pass power
 void HighLinkSave_SetSpecialPowerFlag(HighLinkSave *save, u32 id);
-// Copies the two bytes of the special pass powers' flags into dest
-void HighLinkSave_GetSpecialFlags(HighLinkSave *save, u8 *dest, u32 a2);
+// Copies the two bytes of the special pass powers' flags into dest; the callers pass that count, which it ignores
+void HighLinkSave_GetSpecialFlags(HighLinkSave *save, u8 *dest, u32 count);
 // Counts play time in seconds: mode 0 starts the count, 1 adds the time since the start to the save's total and
 // 2 returns the total as it would be. Returns the total
 u64 HighLinkSave_CountPlaySeconds(HighLinkSave *save, PlayTime *playTime, u32 mode);
@@ -88,7 +88,7 @@ typedef struct {
     u8 level1;
     u8 level2;
     // The price in Pass Orbs, which the description shows
-    u16 unk02;
+    u16 price;
     u16 name;
     u16 info;
     // The strength of the effect: a percentage, an amount or a level

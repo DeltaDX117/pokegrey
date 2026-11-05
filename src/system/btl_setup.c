@@ -36,8 +36,8 @@ static void BtlSetup_LoadPlayerParty(BtlSetup *setup, GameData *gameData, HeapID
 static void BtlSetup_LoadGameData(BtlSetup *setup, GameData *gameData, BtlFieldStatus *status);
 static void BtlSetup_LoadTrainerBase(BtlSetup *setup, GameData *gameData, u32 style, BtlFieldStatus *status,
                                      HeapID heapId);
-static void BtlSetup_SetNetImpl(BtlSetup *setup, GameData *gameData, u32 style, u8 multiMode, NetHandle *handle, u8 a5,
-                                u8 a6, HeapID heapId);
+static void BtlSetup_SetNetImpl(BtlSetup *setup, GameData *gameData, u32 style, u8 multiMode, NetHandle *handle,
+                                u8 commMode, u8 clientId, HeapID heapId);
 
 // The clients whose parties the difficulty changes the levels of
 static const u32 DIFFICULTY_ADJUST_PARTIES[] = { 1, 3 };
@@ -73,14 +73,14 @@ void BtlSetup_FreeContents(BtlSetup *setup) {
             GFL_HeapFree(setup->playerInfo[i]);
         }
     }
-    if (setup->unkB0 != NULL) {
-        GFL_HeapFree(setup->unkB0);
+    if (setup->recBuffer != NULL) {
+        GFL_HeapFree(setup->recBuffer);
     }
     MI_CpuFill8(setup, 0, sizeof(BtlSetup));
 }
 
-void BtlSetup_SetParty(BtlSetup *setup, PokeParty *party, u32 a2) {
-    PokeParty_Copy(party, setup->party[a2]);
+void BtlSetup_SetParty(BtlSetup *setup, PokeParty *party, u32 client) {
+    PokeParty_Copy(party, setup->party[client]);
 }
 
 PokeParty *BtlSetup_GetParty(BtlSetup *setup, u32 index) {
@@ -98,21 +98,21 @@ u32 BtlSetup_CheckFlag(BtlSetup *setup, u32 flag) {
 void BtlSetup_ApplyRegulation(BtlSetup *setup, Regulation *regulation, HeapID heapId) {
     int i;
 
-    setup->unk8E = Regulation_GetParam(regulation, REGULATION_PARAM_16) * 60;
-    setup->unk8C = Regulation_GetParam(regulation, REGULATION_PARAM_15) * 60;
-    Regulation_GetShooterSettings(regulation, (RegulationUnkAC *)setup->unk90);
-    switch (Regulation_GetParam(regulation, REGULATION_PARAM_18)) {
+    setup->commandTimeLimit = Regulation_GetParam(regulation, REGULATION_PARAM_COMMAND_TIME_LIMIT) * 60;
+    setup->gameTimeLimit = Regulation_GetParam(regulation, REGULATION_PARAM_GAME_TIME_LIMIT) * 60;
+    Regulation_GetShooterSettings(regulation, &setup->shooterSettings);
+    switch (Regulation_GetParam(regulation, REGULATION_PARAM_IDLE_EFFECTS)) {
     case 0:
         break;
     case 1:
-        setup->flags |= 0x800;
+        setup->flags |= BTL_SETUP_FLAG_SHORT_IDLE_WAIT;
         break;
     case 2:
-        setup->flags |= 0x400;
+        setup->flags |= BTL_SETUP_FLAG_MSG_IDLE_EFFECTS;
         break;
     case 3:
-        setup->flags |= 0x400;
-        setup->flags |= 0x800;
+        setup->flags |= BTL_SETUP_FLAG_MSG_IDLE_EFFECTS;
+        setup->flags |= BTL_SETUP_FLAG_SHORT_IDLE_WAIT;
         break;
     }
     for (i = 0; i < 4; i++) {
@@ -208,13 +208,13 @@ static void BtlSetup_LoadGameData(BtlSetup *setup, GameData *gameData, BtlFieldS
     TrainerCardSave *card;
 
     setup->fieldSituation.netHandle = NULL;
-    setup->unkA0 = 0xffff;
-    setup->fieldSituation.unk18 = 0;
-    setup->fieldSituation.unk19 = 0;
+    setup->netClientMask = 0xffff;
+    setup->fieldSituation.commMode = 0;
+    setup->fieldSituation.playerClientId = 0;
     setup->fieldSituation.multiMode = 0;
-    setup->unkB0 = NULL;
-    setup->fieldSituation.unk1b = 0;
-    setup->unkDD_0 = FALSE;
+    setup->recBuffer = NULL;
+    setup->fieldSituation.recPlay = 0;
+    setup->cmdCheckError = FALSE;
     setup->gameData = gameData;
     setup->recReadComplete = FALSE;
     for (i = 0; i < 4; i++) {
@@ -224,26 +224,26 @@ static void BtlSetup_LoadGameData(BtlSetup *setup, GameData *gameData, BtlFieldS
     for (i = 0; i < 6; i++) {
         setup->appeared[i] = 0;
     }
-    setup->unk97 = 1;
+    setup->shooterSettings.launcher = 1;
     for (i = 0; i < 7; i++) {
-        setup->unk90[i] = 0;
+        setup->shooterSettings.disabledItems[i] = 0;
     }
     setup->playerInfo[0] = GetGameDataPlayerInfo(gameData);
     setup->bag = GameData_GetBag(gameData);
-    setup->unk7C = GameData_GetBagCursor(gameData);
+    setup->bagCursor = GameData_GetBagCursor(gameData);
     setup->pokedex = GameData_GetPokedex(gameData);
-    setup->unk88 = GameData_GetCommPlayerSupport(gameData);
+    setup->commSupport = GameData_GetCommPlayerSupport(gameData);
     setup->records = GameData_GetRecords(gameData);
     save = GameData_GetSaveControl(gameData);
     card = getTrainerCardData_wrapper(save);
     setup->config = &getTrainerDataBlkAddress(save)->config;
-    setup->unk98 = getBadgeCount(card);
+    setup->badgeCount = getBadgeCount(card);
     MI_CpuCopy8(status, &setup->fieldSituation.env, sizeof(BtlFieldEnv));
     setup->fieldSituation.bgm = SEQ_BGM_VS_NORAPOKE;
     setup->fieldSituation.winBgm = SEQ_BGM_WIN1;
     setup->result = BTL_RESULT_VICTORY;
     if (EventWork_FlagGet(GameData_GetEventWork(gameData), EVENT_FLAG_0x096b)) {
-        BtlSetup_SetFlag(setup, 2);
+        BtlSetup_SetFlag(setup, BTL_SETUP_FLAG_MET_AMANITA);
     }
 }
 
@@ -265,7 +265,7 @@ void BtlSetup_SetWildNormal(BtlSetup *setup, GameData *gameData, PokeParty *part
         int slot = 0;
 
         if (!BoxSaveAccessor_GetNextFreeBoxSlot(boxes, &box, &slot)) {
-            BtlSetup_SetFlag(setup, 0x40);
+            BtlSetup_SetFlag(setup, BTL_SETUP_FLAG_BOXES_FULL);
         }
     }
 }
@@ -289,7 +289,7 @@ void BtlSetup_SetWildMulti(BtlSetup *setup, GameData *gameData, PokeParty *party
         int slot = 0;
 
         if (!BoxSaveAccessor_GetNextFreeBoxSlot(boxes, &box, &slot)) {
-            BtlSetup_SetFlag(setup, 0x40);
+            BtlSetup_SetFlag(setup, BTL_SETUP_FLAG_BOXES_FULL);
         }
     }
 }
@@ -306,8 +306,8 @@ static void BtlSetup_LoadTrainerBase(BtlSetup *setup, GameData *gameData, u32 st
 }
 
 // What every link battle starts from, with a party and a player's info for each other client
-static void BtlSetup_SetNetImpl(BtlSetup *setup, GameData *gameData, u32 style, u8 multiMode, NetHandle *handle, u8 a5,
-                                u8 a6, HeapID heapId) {
+static void BtlSetup_SetNetImpl(BtlSetup *setup, GameData *gameData, u32 style, u8 multiMode, NetHandle *handle,
+                                u8 commMode, u8 clientId, HeapID heapId) {
     BtlFieldStatus status;
     u32 i;
 
@@ -320,10 +320,10 @@ static void BtlSetup_SetNetImpl(BtlSetup *setup, GameData *gameData, u32 style, 
     setup->battleType = 3;
     setup->battleStyle = style;
     setup->fieldSituation.netHandle = handle;
-    setup->fieldSituation.unk18 = a5;
+    setup->fieldSituation.commMode = commMode;
     setup->fieldSituation.multiMode = multiMode;
-    setup->fieldSituation.unk19 = a6;
-    setup->unkA0 = 0xff;
+    setup->fieldSituation.playerClientId = clientId;
+    setup->netClientMask = 0xff;
     setup->fieldSituation.winBgm = SEQ_BGM_WIN2;
     for (i = 0; i < 4; i++) {
         if (i != 0) {
@@ -353,24 +353,27 @@ void BtlSetup_SetCaptureDemo(BtlSetup *setup, GameData *gameData, PokeParty *par
     setup->battleStyle = 0;
 }
 
-void BtlSetup_SetTrainer1v1Single(BtlSetup *setup, GameData *gameData, BtlFieldStatus *status, u32 a3, HeapID heapId) {
+void BtlSetup_SetTrainer1v1Single(BtlSetup *setup, GameData *gameData, BtlFieldStatus *status, u32 trainerId,
+                                  HeapID heapId) {
     BtlSetup_LoadTrainerBase(setup, gameData, 0, status, heapId);
-    BtlSetup_LoadTrainer(setup, gameData, 1, &setup->party[1], a3, heapId);
+    BtlSetup_LoadTrainer(setup, gameData, 1, &setup->party[1], trainerId, heapId);
 }
 
-void BtlSetup_SetTrainer1v1Double(BtlSetup *setup, GameData *gameData, BtlFieldStatus *status, u32 a3, HeapID heapId) {
+void BtlSetup_SetTrainer1v1Double(BtlSetup *setup, GameData *gameData, BtlFieldStatus *status, u32 trainerId,
+                                  HeapID heapId) {
     BtlSetup_LoadTrainerBase(setup, gameData, 1, status, heapId);
-    BtlSetup_LoadTrainer(setup, gameData, 1, &setup->party[1], a3, heapId);
+    BtlSetup_LoadTrainer(setup, gameData, 1, &setup->party[1], trainerId, heapId);
 }
 
-void BtlSetup_SetTrainer3v3(BtlSetup *setup, GameData *gameData, BtlFieldStatus *status, u32 a3, HeapID heapId) {
+void BtlSetup_SetTrainer3v3(BtlSetup *setup, GameData *gameData, BtlFieldStatus *status, u32 trainerId, HeapID heapId) {
     BtlSetup_LoadTrainerBase(setup, gameData, 2, status, heapId);
-    BtlSetup_LoadTrainer(setup, gameData, 1, &setup->party[1], a3, heapId);
+    BtlSetup_LoadTrainer(setup, gameData, 1, &setup->party[1], trainerId, heapId);
 }
 
-void BtlSetup_SetTrainerRotation(BtlSetup *setup, GameData *gameData, BtlFieldStatus *status, u32 a3, HeapID heapId) {
+void BtlSetup_SetTrainerRotation(BtlSetup *setup, GameData *gameData, BtlFieldStatus *status, u32 trainerId,
+                                 HeapID heapId) {
     BtlSetup_LoadTrainerBase(setup, gameData, 3, status, heapId);
-    BtlSetup_LoadTrainer(setup, gameData, 1, &setup->party[1], a3, heapId);
+    BtlSetup_LoadTrainer(setup, gameData, 1, &setup->party[1], trainerId, heapId);
 }
 
 void BtlSetup_SetTrainer1v2(BtlSetup *setup, GameData *gameData, BtlFieldStatus *status, u32 trainerId, u32 trainerId2,
@@ -381,42 +384,43 @@ void BtlSetup_SetTrainer1v2(BtlSetup *setup, GameData *gameData, BtlFieldStatus 
     setup->fieldSituation.multiMode = 4;
 }
 
-// a3 is the partner's trainer, a4 and a5 the opponents'
-void BtlSetup_SetTrainer2v2(BtlSetup *setup, GameData *gameData, BtlFieldStatus *status, u32 a3, u32 a4, u32 a5,
-                            HeapID heapId) {
+// The partner's trainer and the two opponents'
+void BtlSetup_SetTrainer2v2(BtlSetup *setup, GameData *gameData, BtlFieldStatus *status, u32 partnerId, u32 trainerId,
+                            u32 trainerId2, HeapID heapId) {
     BtlSetup_LoadTrainerBase(setup, gameData, 1, status, heapId);
-    BtlSetup_LoadTrainer(setup, gameData, 2, &setup->party[2], a3, heapId);
-    BtlSetup_LoadTrainer(setup, gameData, 1, &setup->party[1], a4, heapId);
-    BtlSetup_LoadTrainer(setup, gameData, 3, &setup->party[3], a5, heapId);
+    BtlSetup_LoadTrainer(setup, gameData, 2, &setup->party[2], partnerId, heapId);
+    BtlSetup_LoadTrainer(setup, gameData, 1, &setup->party[1], trainerId, heapId);
+    BtlSetup_LoadTrainer(setup, gameData, 3, &setup->party[3], trainerId2, heapId);
     setup->fieldSituation.multiMode = 3;
 }
 
-void BtlSetup_SetNet1v1Single(BtlSetup *setup, GameData *gameData, NetHandle *handle, u8 a3, HeapID heapId) {
-    BtlSetup_SetNetImpl(setup, gameData, 0, 0, handle, a3, GFL_NetGetHandleNetId(handle), heapId);
+void BtlSetup_SetNet1v1Single(BtlSetup *setup, GameData *gameData, NetHandle *handle, u8 commMode, HeapID heapId) {
+    BtlSetup_SetNetImpl(setup, gameData, 0, 0, handle, commMode, GFL_NetGetHandleNetId(handle), heapId);
 }
 
-void BtlSetup_SetNet1v1Double(BtlSetup *setup, GameData *gameData, NetHandle *handle, u8 a3, HeapID heapId) {
-    BtlSetup_SetNetImpl(setup, gameData, 1, 0, handle, a3, GFL_NetGetHandleNetId(handle), heapId);
+void BtlSetup_SetNet1v1Double(BtlSetup *setup, GameData *gameData, NetHandle *handle, u8 commMode, HeapID heapId) {
+    BtlSetup_SetNetImpl(setup, gameData, 1, 0, handle, commMode, GFL_NetGetHandleNetId(handle), heapId);
 }
 
-void BtlSetup_SetNetMultiVsNet(BtlSetup *setup, GameData *gameData, NetHandle *handle, u8 a3, u8 a4, HeapID heapId) {
-    BtlSetup_SetNetImpl(setup, gameData, 1, 1, handle, a3, a4, heapId);
+void BtlSetup_SetNetMultiVsNet(BtlSetup *setup, GameData *gameData, NetHandle *handle, u8 commMode, u8 clientId,
+                               HeapID heapId) {
+    BtlSetup_SetNetImpl(setup, gameData, 1, 1, handle, commMode, clientId, heapId);
 }
 
-void BtlSetup_SetNetMultiVsAI(BtlSetup *setup, GameData *gameData, NetHandle *handle, u8 a3, u8 a4, u32 a5, u32 a6,
-                              HeapID heapId) {
-    BtlSetup_SetNetImpl(setup, gameData, 1, 2, handle, a3, a4, heapId);
+void BtlSetup_SetNetMultiVsAI(BtlSetup *setup, GameData *gameData, NetHandle *handle, u8 commMode, u8 clientId,
+                              u32 trainerId, u32 trainerId2, HeapID heapId) {
+    BtlSetup_SetNetImpl(setup, gameData, 1, 2, handle, commMode, clientId, heapId);
     setup->battleType = 1;
-    BtlSetup_LoadTrainer(setup, gameData, 1, &setup->party[1], a5, heapId);
-    BtlSetup_LoadTrainer(setup, gameData, 3, &setup->party[3], a6, heapId);
+    BtlSetup_LoadTrainer(setup, gameData, 1, &setup->party[1], trainerId, heapId);
+    BtlSetup_LoadTrainer(setup, gameData, 3, &setup->party[3], trainerId2, heapId);
 }
 
-void BtlSetup_SetNetTriple(BtlSetup *setup, GameData *gameData, NetHandle *handle, u8 a3, HeapID heapId) {
-    BtlSetup_SetNetImpl(setup, gameData, 2, 0, handle, a3, GFL_NetGetHandleNetId(handle), heapId);
+void BtlSetup_SetNetTriple(BtlSetup *setup, GameData *gameData, NetHandle *handle, u8 commMode, HeapID heapId) {
+    BtlSetup_SetNetImpl(setup, gameData, 2, 0, handle, commMode, GFL_NetGetHandleNetId(handle), heapId);
 }
 
-void BtlSetup_SetNetRotation(BtlSetup *setup, GameData *gameData, NetHandle *handle, u8 a3, HeapID heapId) {
-    BtlSetup_SetNetImpl(setup, gameData, 3, 0, handle, a3, GFL_NetGetHandleNetId(handle), heapId);
+void BtlSetup_SetNetRotation(BtlSetup *setup, GameData *gameData, NetHandle *handle, u8 commMode, HeapID heapId) {
+    BtlSetup_SetNetImpl(setup, gameData, 3, 0, handle, commMode, GFL_NetGetHandleNetId(handle), heapId);
 }
 
 // A setup with a party, a player's info and a trainer for every client, and its own copy of the options
@@ -435,7 +439,7 @@ void BtlSetup_InitForRecord(BtlSetup *setup, GameData *gameData, HeapID heapId) 
     setup->config = Config_Create(heapId);
     initConfig(&trainerData->config, setup->config);
     setup->pokedex = GameData_GetPokedex(gameData);
-    setup->fieldSituation.unk1b = 1;
+    setup->fieldSituation.recPlay = 1;
     BtlSetup_AllocRecBuffer(setup, heapId);
 }
 
@@ -494,7 +498,7 @@ void BtlSetup_PostProcessTrialHouse(BtlSetup *setup) {
 }
 
 void BtlSetup_AllocRecBuffer(BtlSetup *setup, HeapID heapId) {
-    if (setup->unkB0 == NULL) {
-        setup->unkB0 = GFL_HeapAllocate(heapId, 0xc00, FALSE, "btl_setup.c", 1035);
+    if (setup->recBuffer == NULL) {
+        setup->recBuffer = GFL_HeapAllocate(heapId, 0xc00, FALSE, "btl_setup.c", 1035);
     }
 }

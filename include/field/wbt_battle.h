@@ -11,7 +11,7 @@
 void WbtBattle_SwapPickedPokemon(WbtSystem *sys);
 void WbtBattle_ResetPicks(WbtSystem *sys);
 void WbtBattle_SetPick(WbtSystem *sys, u32 index, u8 value);
-void WbtBattle_RandomPick(WbtSystem *sys, u32 a1);
+void WbtBattle_RandomPick(WbtSystem *sys, u32 index);
 u8 WbtBattle_GetPick(WbtSystem *sys, u32 index);
 WbtPartyList *WbtBattle_CreatePartyList(FieldScriptEnv *env, WbtSystem *sys);
 void WbtBattle_ShowPartyList(WbtPartyList *work);
@@ -29,6 +29,6 @@ u32 WbtBattle_GetOpponentFlag(WbtSystem *sys);
 u16 WbtBattle_GetOpponentObjCode(WbtSystem *sys);
 // The opponent's name
 void WbtBattle_GetOpponentName(WbtSystem *sys, StrBuf *strbuf);
-void WbtBattle_LoadOpponentLine(WbtSystem *sys, int a1, StrBuf *strbuf);
+void WbtBattle_LoadOpponentLine(WbtSystem *sys, int index, StrBuf *strbuf);
 
 #endif // POKEBW2_FIELD_WBT_BATTLE_H

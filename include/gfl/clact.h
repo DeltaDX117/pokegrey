@@ -48,10 +48,11 @@ typedef struct {
     u16 charOffsetSub;
 } ClActSysSetup;
 
-// The setup that most apps create the system with, the same as the intro's copy
-extern const ClActSysSetup data_02093f08;
-// Game Sync's screens' setup, with 192 for the sub screen's y
-extern const ClActSysSetup data_02093f24;
+// The setup that most apps create the system with, the same as the intro's copy: the sub screen's surface at y 512,
+// apart from the main screen's
+extern const ClActSysSetup gClActSysSetupSplitScreens;
+// Game Sync's screens' setup: the sub screen's surface at y 192, right below the main screen's
+extern const ClActSysSetup gClActSysSetupJoinedScreens;
 
 // Where a resource is loaded: CLACT_VRAM_MAIN, _SUB or _BOTH
 enum {
@@ -282,8 +283,8 @@ ClActUnit *ClActUnit_Create(u16 count, u8 priority, HeapID heapId);
 void ClActUnit_Delete(ClActUnit *unit);
 void ClActUnit_SetActive(ClActUnit *unit, BOOL active);
 BOOL ClActUnit_IsActive(ClActUnit *unit);
-void ClActUnit_SetVisibleAnimOnly(ClActUnit *unit, BOOL a1);
-void ClActUnit_SetSharedParams(ClActUnit *unit, BOOL a1);
+void ClActUnit_SetVisibleAnimOnly(ClActUnit *unit, BOOL visibleAnimOnly);
+void ClActUnit_SetSharedParams(ClActUnit *unit, BOOL sharedParams);
 void ClActUnit_SetRenderer(ClActUnit *unit, ClActRenderer *renderer);
 void ClActUnit_UseSystemRenderer(ClActUnit *unit);
 

@@ -23,15 +23,15 @@ enum {
     COLOSSEUM_CMD_MEMBER,
     COLOSSEUM_CMD_CARD,
     COLOSSEUM_CMD_CHOICE,
-    COLOSSEUM_CMD_UNK4,
-    COLOSSEUM_CMD_UNK5,
+    COLOSSEUM_CMD_VOTE,
+    COLOSSEUM_CMD_VOTE_REPLY,
     COLOSSEUM_CMD_PARTY,
-    COLOSSEUM_CMD_RESULT,
-    COLOSSEUM_CMD_UNK8,
-    COLOSSEUM_CMD_UNK9,
-    COLOSSEUM_CMD_UNKA,
-    COLOSSEUM_CMD_UNKB,
-    COLOSSEUM_CMD_UNKD = COLOSSEUM_CMD_BASE + 13,
+    COLOSSEUM_CMD_POSITIONS,
+    COLOSSEUM_CMD_READY,
+    COLOSSEUM_CMD_READY_CANCEL,
+    COLOSSEUM_CMD_CANCEL_ACK,
+    COLOSSEUM_CMD_ALL_READY,
+    COLOSSEUM_CMD_LEAVE = COLOSSEUM_CMD_BASE + 13,
 };
 
 static void *Colosseum_GetRecvBuffer(int netId, void *work, int size);
@@ -39,16 +39,16 @@ static void Colosseum_RecvNone(int netId, int size, const void *data, void *work
 static void Colosseum_RecvMember(int netId, int size, const void *data, void *work, NetHandle *handle);
 static void Colosseum_RecvCard(int netId, int size, const void *data, void *work, NetHandle *handle);
 static void Colosseum_RecvChoice(int netId, int size, const void *data, void *work, NetHandle *handle);
-static void Colosseum_RecvUnk4(int netId, int size, const void *data, void *work, NetHandle *handle);
-static void Colosseum_RecvUnk5(int netId, int size, const void *data, void *work, NetHandle *handle);
+static void Colosseum_RecvVote(int netId, int size, const void *data, void *work, NetHandle *handle);
+static void Colosseum_RecvVoteReply(int netId, int size, const void *data, void *work, NetHandle *handle);
 static void Colosseum_RecvParty(int netId, int size, const void *data, void *work, NetHandle *handle);
-static void Colosseum_RecvResult(int netId, int size, const void *data, void *work, NetHandle *handle);
-static void Colosseum_RecvUnk8(int netId, int size, const void *data, void *work, NetHandle *handle);
-static void Colosseum_RecvUnk9(int netId, int size, const void *data, void *work, NetHandle *handle);
-static void Colosseum_RecvUnkA(int netId, int size, const void *data, void *work, NetHandle *handle);
-static void Colosseum_RecvUnkB(int netId, int size, const void *data, void *work, NetHandle *handle);
+static void Colosseum_RecvPositions(int netId, int size, const void *data, void *work, NetHandle *handle);
+static void Colosseum_RecvReady(int netId, int size, const void *data, void *work, NetHandle *handle);
+static void Colosseum_RecvReadyCancel(int netId, int size, const void *data, void *work, NetHandle *handle);
+static void Colosseum_RecvCancelAck(int netId, int size, const void *data, void *work, NetHandle *handle);
+static void Colosseum_RecvAllReady(int netId, int size, const void *data, void *work, NetHandle *handle);
 static void Colosseum_RecvUnkC(int netId, int size, const void *data, void *work, NetHandle *handle);
-static void Colosseum_RecvUnkD(int netId, int size, const void *data, void *work, NetHandle *handle);
+static void Colosseum_RecvLeave(int netId, int size, const void *data, void *work, NetHandle *handle);
 
 // clang-format off
 static const NetCommand sColosseumCommands[] = {
@@ -56,16 +56,16 @@ static const NetCommand sColosseumCommands[] = {
     {Colosseum_RecvMember, Colosseum_GetRecvBuffer},
     {Colosseum_RecvCard, Colosseum_GetRecvBuffer},
     {Colosseum_RecvChoice, Colosseum_GetRecvBuffer},
-    {Colosseum_RecvUnk4, NULL},
-    {Colosseum_RecvUnk5, NULL},
+    {Colosseum_RecvVote, NULL},
+    {Colosseum_RecvVoteReply, NULL},
     {Colosseum_RecvParty, Colosseum_GetRecvBuffer},
-    {Colosseum_RecvResult, NULL},
-    {Colosseum_RecvUnk8, NULL},
-    {Colosseum_RecvUnk9, NULL},
-    {Colosseum_RecvUnkA, NULL},
-    {Colosseum_RecvUnkB, NULL},
+    {Colosseum_RecvPositions, NULL},
+    {Colosseum_RecvReady, NULL},
+    {Colosseum_RecvReadyCancel, NULL},
+    {Colosseum_RecvCancelAck, NULL},
+    {Colosseum_RecvAllReady, NULL},
     {Colosseum_RecvUnkC, NULL},
-    {Colosseum_RecvUnkD, NULL},
+    {Colosseum_RecvLeave, NULL},
 };
 
 // clang-format on
@@ -138,7 +138,7 @@ BOOL Colosseum_SendChoice(const ColosseumChoice *choice) {
                                        sizeof(ColosseumChoice), choice, FALSE, TRUE, TRUE);
 }
 
-static void Colosseum_RecvUnk4(int netId, int size, const void *data, void *work, NetHandle *handle) {
+static void Colosseum_RecvVote(int netId, int size, const void *data, void *work, NetHandle *handle) {
     UnionSystem *unisys = work;
     UnionColosseum *colosseum = unisys->colosseum_sys;
 
@@ -147,24 +147,25 @@ static void Colosseum_RecvUnk4(int netId, int size, const void *data, void *work
     }
 }
 
-BOOL Colosseum_SendUnk4(UnionColosseum *colosseum) {
-    u8 value = Colosseum_GetUnkDC(colosseum);
+BOOL Colosseum_SendVote(UnionColosseum *colosseum) {
+    u8 value = Colosseum_GetMyVote(colosseum);
 
-    return GFL_NetSendCommandToMachine(NetHandle_GetOwn(), 0, COLOSSEUM_CMD_UNK4, 1, &value, TRUE, FALSE, FALSE);
+    return GFL_NetSendCommandToMachine(NetHandle_GetOwn(), 0, COLOSSEUM_CMD_VOTE, 1, &value, TRUE, FALSE, FALSE);
 }
 
-static void Colosseum_RecvUnk5(int netId, int size, const void *data, void *work, NetHandle *handle) {
+static void Colosseum_RecvVoteReply(int netId, int size, const void *data, void *work, NetHandle *handle) {
     UnionSystem *unisys = work;
     UnionColosseum *colosseum = unisys->colosseum_sys;
 
     if (colosseum != NULL && colosseum->commPlayer != NULL) {
-        Colosseum_SetUnkDD(colosseum, *(const u32 *)data);
+        Colosseum_SetMyVoteReply(colosseum, *(const u32 *)data);
     }
 }
 
-BOOL Colosseum_SendUnk5(UnionColosseum *colosseum, u32 netId, u32 value) {
-    Colosseum_GetUnkDC(colosseum);
-    return GFL_NetSendCommandToMachine(NetHandle_GetOwn(), netId, COLOSSEUM_CMD_UNK5, 4, &value, TRUE, FALSE, FALSE);
+BOOL Colosseum_SendVoteReply(UnionColosseum *colosseum, u32 netId, u32 value) {
+    Colosseum_GetMyVote(colosseum);
+    return GFL_NetSendCommandToMachine(NetHandle_GetOwn(), netId, COLOSSEUM_CMD_VOTE_REPLY, 4, &value, TRUE, FALSE,
+                                       FALSE);
 }
 
 static void Colosseum_RecvParty(int netId, int size, const void *data, void *work, NetHandle *handle) {
@@ -184,71 +185,72 @@ BOOL Colosseum_SendParty(const PokeParty *party) {
                                        party, TRUE, FALSE, TRUE);
 }
 
-static void Colosseum_RecvResult(int netId, int size, const void *data, void *work, NetHandle *handle) {
+static void Colosseum_RecvPositions(int netId, int size, const void *data, void *work, NetHandle *handle) {
     UnionSystem *unisys = work;
     UnionColosseum *colosseum = unisys->colosseum_sys;
 
     if (colosseum != NULL) {
-        MI_CpuCopy8(data, colosseum->unk16C, size);
-        colosseum->unk170 = TRUE;
+        MI_CpuCopy8(data, colosseum->positions, size);
+        colosseum->positionsReceived = TRUE;
     }
 }
 
-BOOL Colosseum_SendResult(const void *result) {
-    return GFL_NetSendCommand(NetHandle_GetOwn(), COLOSSEUM_CMD_RESULT, 4, result);
+BOOL Colosseum_SendPositions(const void *result) {
+    return GFL_NetSendCommand(NetHandle_GetOwn(), COLOSSEUM_CMD_POSITIONS, 4, result);
 }
 
-static void Colosseum_RecvUnk8(int netId, int size, const void *data, void *work, NetHandle *handle) {
+static void Colosseum_RecvReady(int netId, int size, const void *data, void *work, NetHandle *handle) {
     UnionSystem *unisys = work;
     UnionColosseum *colosseum = unisys->colosseum_sys;
 
     if (colosseum != NULL) {
-        colosseum->unkD4[netId] = TRUE;
+        colosseum->readyReceived[netId] = TRUE;
     }
 }
 
-BOOL Colosseum_SendUnk8(void) {
-    return GFL_NetSendCommandToMachine(NetHandle_GetOwn(), 0, COLOSSEUM_CMD_UNK8, 0, NULL, TRUE, FALSE, FALSE);
+BOOL Colosseum_SendReady(void) {
+    return GFL_NetSendCommandToMachine(NetHandle_GetOwn(), 0, COLOSSEUM_CMD_READY, 0, NULL, TRUE, FALSE, FALSE);
 }
 
-static void Colosseum_RecvUnk9(int netId, int size, const void *data, void *work, NetHandle *handle) {
+static void Colosseum_RecvReadyCancel(int netId, int size, const void *data, void *work, NetHandle *handle) {
     UnionSystem *unisys = work;
     UnionColosseum *colosseum = unisys->colosseum_sys;
 
     if (colosseum != NULL) {
-        colosseum->unkD8[netId] = TRUE;
-        colosseum->unkD4[netId] = FALSE;
+        colosseum->cancelReceived[netId] = TRUE;
+        colosseum->readyReceived[netId] = FALSE;
     }
 }
 
-BOOL Colosseum_SendUnk9(void) {
-    return GFL_NetSendCommandToMachine(NetHandle_GetOwn(), 0, COLOSSEUM_CMD_UNK9, 0, NULL, TRUE, FALSE, FALSE);
+BOOL Colosseum_SendReadyCancel(void) {
+    return GFL_NetSendCommandToMachine(NetHandle_GetOwn(), 0, COLOSSEUM_CMD_READY_CANCEL, 0, NULL, TRUE, FALSE, FALSE);
 }
 
-static void Colosseum_RecvUnkA(int netId, int size, const void *data, void *work, NetHandle *handle) {
+static void Colosseum_RecvCancelAck(int netId, int size, const void *data, void *work, NetHandle *handle) {
     UnionSystem *unisys = work;
     UnionColosseum *colosseum = unisys->colosseum_sys;
 
     if (colosseum != NULL) {
-        colosseum->unkDF = FALSE;
+        colosseum->readySent = FALSE;
     }
 }
 
-BOOL Colosseum_SendUnkA(u32 netId) {
-    return GFL_NetSendCommandToMachine(NetHandle_GetOwn(), netId, COLOSSEUM_CMD_UNKA, 0, NULL, TRUE, FALSE, FALSE);
+BOOL Colosseum_SendCancelAck(u32 netId) {
+    return GFL_NetSendCommandToMachine(NetHandle_GetOwn(), netId, COLOSSEUM_CMD_CANCEL_ACK, 0, NULL, TRUE, FALSE,
+                                       FALSE);
 }
 
-static void Colosseum_RecvUnkB(int netId, int size, const void *data, void *work, NetHandle *handle) {
+static void Colosseum_RecvAllReady(int netId, int size, const void *data, void *work, NetHandle *handle) {
     UnionSystem *unisys = work;
     UnionColosseum *colosseum = unisys->colosseum_sys;
 
     if (colosseum != NULL) {
-        colosseum->unkCB = TRUE;
+        colosseum->allReady = TRUE;
     }
 }
 
-BOOL Colosseum_SendUnkB(void) {
-    return GFL_NetSendCommandToMachine(NetHandle_GetOwn(), GFL_NET_NETID_SERVER, COLOSSEUM_CMD_UNKB, 0, NULL, TRUE,
+BOOL Colosseum_SendAllReady(void) {
+    return GFL_NetSendCommandToMachine(NetHandle_GetOwn(), GFL_NET_NETID_SERVER, COLOSSEUM_CMD_ALL_READY, 0, NULL, TRUE,
                                        FALSE, FALSE);
 }
 
@@ -261,15 +263,15 @@ static void Colosseum_RecvUnkC(int netId, int size, const void *data, void *work
     }
 }
 
-static void Colosseum_RecvUnkD(int netId, int size, const void *data, void *work, NetHandle *handle) {
+static void Colosseum_RecvLeave(int netId, int size, const void *data, void *work, NetHandle *handle) {
     UnionSystem *unisys = work;
     UnionColosseum *colosseum = unisys->colosseum_sys;
 
     if (colosseum != NULL) {
-        colosseum->unk172[netId] = TRUE;
+        colosseum->leaving[netId] = TRUE;
     }
 }
 
-BOOL Colosseum_SendUnkD(void) {
-    return GFL_NetSendCommand(NetHandle_GetOwn(), COLOSSEUM_CMD_UNKD, 0, NULL);
+BOOL Colosseum_SendLeave(void) {
+    return GFL_NetSendCommand(NetHandle_GetOwn(), COLOSSEUM_CMD_LEAVE, 0, NULL);
 }

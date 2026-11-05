@@ -39,11 +39,14 @@ struct NetState {
     u8 unk49;
     // Set when the other machine asked to disconnect (base command 11)
     u8 disconnectReceived;
-    u8 unk4B;
+    // Set when a Wi-Fi disconnect was asked for on a machine other than the server, which then only checks for the
+    // close (DWCRap_RequestClose's checkOnly) instead of requesting it
+    u8 disconnectAsChild;
     u8 unk4C;
     u8 errorFlag;
     s8 errorCode;
-    u8 unk4F;
+    // NetState_SetAutoExit's value
+    u8 autoExit;
     // What the last call set the device's disconnect error to
     u8 disconnectError;
     // Whether ending the network has been requested
@@ -69,9 +72,9 @@ static void NetState_StartChildToMac(NetState *state);
 static void NetState_StartScanForMac(NetState *state);
 static void NetState_Scanning(NetState *state);
 static void NetState_BeginScan(NetState *state);
-static void func_02041440(NetState *state);
+static void NetState_ParentStarted(NetState *state);
 static void NetState_Parent(NetState *state);
-static BOOL func_02041448(void);
+static BOOL NetState_OnParentStarted(void);
 static void NetState_BeginParent(NetState *state);
 static void NetState_EnterParent(HeapID heapId);
 static u32 NetState_GetShortWait(NetState *state);
@@ -83,7 +86,7 @@ static void NetState_ChangeoverRestartChild(NetState *state);
 static void NetState_ChangeoverParentNegotiate(NetState *state);
 static void NetState_ChangeoverParentWait(NetState *state);
 static void NetState_ChangeoverParentStarted(NetState *state);
-static BOOL func_02041774(void);
+static BOOL NetState_OnChangeoverParentStarted(void);
 static void NetState_ChangeoverStartParent(NetState *state);
 static void NetState_ChangeoverChildNegotiate(NetState *state);
 static void NetState_ChangeoverChildWaitNegotiated(NetState *state);
@@ -92,8 +95,8 @@ static void NetState_IrcNegotiate(NetState *state);
 static void NetState_ChangeoverWaitIdleForParent(NetState *state);
 static void NetState_ChangeoverChildWait(NetState *state);
 static void NetState_IrcConnect(NetState *state);
-static void func_02041af4(NetState *state);
-static void NetState_InitChangeoverMode(int mode, int a1, const u8 *mac);
+static void NetState_ChangeoverSwapRoles(NetState *state);
+static void NetState_InitChangeoverMode(int mode, int useParentMac, const u8 *mac);
 static void NetState_ChangeoverChildToParent(NetState *state);
 static void NetState_ExitIfAlone(NetState *state);
 static void NetState_EndWaitIdle(NetState *state);
@@ -102,7 +105,7 @@ static void NetState_Idle(NetState *state);
 static void NetState_WifiError(NetState *state);
 static void NetState_WifiMatchEnded(NetState *state);
 static void NetState_WifiFailed(NetState *state);
-static void func_02041e3c(NetState *state);
+static void NetState_WifiUpdate(NetState *state);
 static void NetState_WifiConnected(NetState *state);
 static void NetState_SetErrorCode(NetState *state, int code);
 static void NetState_WifiConnecting(NetState *state);
@@ -248,20 +251,20 @@ BOOL NetState_Update(void) {
     return FALSE;
 }
 
-static void func_02041440(NetState *state) {
+static void NetState_ParentStarted(NetState *state) {
 }
 
 static void NetState_Parent(NetState *state) {
 }
 
-static BOOL func_02041448(void) {
-    NetState_SetFuncLine(_pNetState, func_02041440, 0, 490);
+static BOOL NetState_OnParentStarted(void) {
+    NetState_SetFuncLine(_pNetState, NetState_ParentStarted, 0, 490);
     return TRUE;
 }
 
 static void NetState_BeginParent(NetState *state) {
     GFL_NetGetInitData();
-    if (NetSystem_StartParent(1, 0x200, 1, func_02041448)) {
+    if (NetSystem_StartParent(1, 0x200, 1, NetState_OnParentStarted)) {
         NetState_SetFuncLine(_pNetState, NetState_Parent, 0, 507);
     }
 }
@@ -360,7 +363,7 @@ static void NetState_ChangeoverParentStarted(NetState *state) {
     NetState_SetFuncLine(_pNetState, NetState_ChangeoverParentWait, NetState_GetLongWait(state), 726);
 }
 
-static BOOL func_02041774(void) {
+static BOOL NetState_OnChangeoverParentStarted(void) {
     NetState_SetFuncLine(_pNetState, NetState_ChangeoverParentWait, NetState_GetLongWait(_pNetState), 732);
     return TRUE;
 }
@@ -368,7 +371,7 @@ static BOOL func_02041774(void) {
 static void NetState_ChangeoverStartParent(NetState *state) {
     GFLNetSys *sys = GFL_NetGetSys();
 
-    if (sys->pDevTable->isIdle() && NetSystem_StartParent(0, 0x200, 0, func_02041774)) {
+    if (sys->pDevTable->isIdle() && NetSystem_StartParent(0, 0x200, 0, NetState_OnChangeoverParentStarted)) {
         state->unk4C = FALSE;
         NetState_SetFuncLine(_pNetState, NetState_ChangeoverParentStarted, 30, 754);
     }
@@ -464,11 +467,11 @@ static void NetState_IrcConnect(NetState *state) {
     }
 }
 
-void NetState_StartChangeover(int a0, void (*callback)(void *work), int a2) {
+void NetState_StartChangeover(int heapId, void (*callback)(void *work), int useParentMac) {
     GFLNetInitData *ini = GFL_NetGetInitData();
 
     GFL_NetGetSys();
-    NetState_InitChangeoverMode(0, a2, NULL);
+    NetState_InitChangeoverMode(0, useParentMac, NULL);
     if (ini->bNetType == GFL_NET_TYPE_IRC || ini->bNetType == GFL_NET_TYPE_IRC_WIRELESS) {
         NetSystem_StartInfrared(0);
         _pNetState->connectCallback = callback;
@@ -484,7 +487,7 @@ void NetState_StartChangeover(int a0, void (*callback)(void *work), int a2) {
     }
 }
 
-static void func_02041af4(NetState *state) {
+static void NetState_ChangeoverSwapRoles(NetState *state) {
     GFLNetSys *sys = GFL_NetGetSys();
 
     if (_pNetState->mode == NET_STATE_MODE_CHILD && _pNetState->func == NetState_ChangeoverChildWait &&
@@ -496,17 +499,17 @@ static void func_02041af4(NetState *state) {
     }
 }
 
-static void NetState_InitChangeoverMode(int mode, int a1, const u8 *mac) {
+static void NetState_InitChangeoverMode(int mode, int useParentMac, const u8 *mac) {
     GFL_NetGetSys();
-    _pNetState->useParentMac = a1;
+    _pNetState->useParentMac = useParentMac;
     _pNetState->mode = mode;
     if (mac != NULL) {
         MI_CpuCopy8(mac, _pNetState->parentMac, sizeof(_pNetState->parentMac));
     } else {
         MI_CpuFill8(_pNetState->parentMac, 0xff, sizeof(_pNetState->parentMac));
     }
-    NetState_SetFuncLine(_pNetState, func_02041af4, 0, 1020);
-    func_02041af4(_pNetState);
+    NetState_SetFuncLine(_pNetState, NetState_ChangeoverSwapRoles, 0, 1020);
+    NetState_ChangeoverSwapRoles(_pNetState);
 }
 
 static void NetState_ChangeoverChildToParent(NetState *state) {
@@ -623,7 +626,7 @@ static void NetState_WifiMatchEnded(NetState *state) {
 static void NetState_WifiFailed(NetState *state) {
 }
 
-static void func_02041e3c(NetState *state) {
+static void NetState_WifiUpdate(NetState *state) {
     GFLNetSys *sys = GFL_NetGetSys();
 
     if (sys->pDevTable->update(0) < 0) {
@@ -735,7 +738,7 @@ int NetState_GetWifiStatus(void) {
     if (func == NetState_WifiConnected) {
         return 1;
     }
-    if (func == func_02041e3c) {
+    if (func == NetState_WifiUpdate) {
         return 3;
     }
     if (func == NetState_WifiMatchEnded) {
@@ -757,7 +760,7 @@ static void NetState_WifiDisconnecting(NetState *state) {
     BOOL a0 = FALSE;
 
     NetSystem_SetWifiConnected(0);
-    if (!state->unk4B) {
+    if (!state->disconnectAsChild) {
         a0 = TRUE;
     }
     if (sys->pDevTable->close(a0, 0)) {
@@ -776,12 +779,12 @@ void NetState_WifiDisconnect(BOOL a0) {
     if (_pNetState != NULL) {
         if (a0) {
             if (NetSystem_GetNetId() == 0) {
-                _pNetState->unk4B = FALSE;
+                _pNetState->disconnectAsChild = FALSE;
             } else {
-                _pNetState->unk4B = TRUE;
+                _pNetState->disconnectAsChild = TRUE;
             }
         } else {
-            _pNetState->unk4B = FALSE;
+            _pNetState->disconnectAsChild = FALSE;
         }
         NetState_SetFuncLine(_pNetState, NetState_WifiDisconnecting, 0, 1639);
         NetState_WifiDisconnecting(_pNetState);
@@ -881,9 +884,9 @@ void NetState_StartWifiLogin(void) {
     }
 }
 
-void NetState_SetAutoExit(u8 a0) {
+void NetState_SetAutoExit(u8 autoExit) {
     if (_pNetState != NULL) {
-        _pNetState->unk4F = a0;
+        _pNetState->autoExit = autoExit;
     }
 }
 

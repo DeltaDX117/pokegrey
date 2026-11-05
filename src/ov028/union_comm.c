@@ -7,6 +7,7 @@
 #include "field/union_app.h"
 #include "field/union_eff.h"
 #include "field/union_main.h"
+#include "field/union_oneself.h"
 #include "field/unity_tower.h"
 #include "gfl/heap.h"
 #include "gfl/net.h"
@@ -88,14 +89,14 @@ static const GFLNetInitData data_ov028_02172c94 = {
 
 static const NetCommand data_ov028_02172d04[22] = {
     { UnionNet_RecvGroupDone, NULL },
-    { UnionNet_RecvUnk19, NULL },
-    { UnionNet_RecvUnk1A, NULL },
+    { UnionNet_RecvActivity, NULL },
+    { UnionNet_RecvActivityReply, NULL },
     { UnionNet_RecvMac, NULL },
-    { UnionNet_RecvUnk46_2, NULL },
+    { UnionNet_RecvConnectReply, NULL },
     { UnionNet_RecvPlayerInfo, NULL },
     { UnionNet_RecvCard, UnionNet_GetRecvBuffer },
     { UnionNet_RecvColosseumMember, UnionNet_GetRecvBuffer },
-    { UnionNet_RecvColosseumUnkDE, UnionNet_GetRecvBuffer },
+    { UnionNet_RecvColosseumEntryResult, UnionNet_GetRecvBuffer },
     { UnionNet_RecvColosseumUnkCA, NULL },
     { UnionNet_RecvEntryRequest, NULL },
     { UnionNet_RecvEntryReply2, NULL },
@@ -164,7 +165,7 @@ void UnionComm_OnNetReady(void *work) {
 BOOL UnionComm_Exit(u32 *seq, void *param, void *work) {
     UnionSystem *unisys = work;
 
-    unisys->unk3634 = TRUE;
+    unisys->exiting = TRUE;
     if (unisys->commState < 3) {
         return FALSE;
     }
@@ -293,9 +294,10 @@ void UnionComm_Main(u32 *seq, void *param, void *work) {
         if (GFL_NetErrCheck() && GFL_NetIsParent() == TRUE) {
             UnionColosseum *colosseum = unisys->colosseum_sys;
 
-            if (colosseum != NULL && colosseum->unkC8_0 == 1 && unisys->situ.step == 0x2a && !colosseum->unkC8_1) {
+            if (colosseum != NULL && colosseum->started == 1 && unisys->situ.step == UNION_STEP_COLOSSEUM_IDLE &&
+                !colosseum->relinkRequested) {
                 UnionComm_RequestLink1(unisys);
-                unisys->colosseum_sys->unkC8_1 = TRUE;
+                unisys->colosseum_sys->relinkRequested = TRUE;
             }
         }
     }
@@ -360,21 +362,21 @@ static void UnionComm_UpdateEntries(UnionSystem *unisys) {
 }
 
 static void UnionComm_UpdateColosseum(UnionSystem *unisys) {
-    if (unisys->colosseum_sys == NULL || !unisys->colosseum_sys->unkC8_0) {
+    if (unisys->colosseum_sys == NULL || !unisys->colosseum_sys->started) {
         return;
     }
     if (UnionMain_IsFieldReady(unisys) == TRUE) {
         if (!UnionCommand_IsActive(unisys)) {
             CommPlayer_Update(unisys->param->gsys, unisys->colosseum_sys->commPlayer);
-            if (unisys->colosseum_sys->unk17F == 0) {
-                if (CommPlayer_GetMyStatus(unisys->colosseum_sys->commPlayer,
-                                           (CommPlayerStatus *)unisys->colosseum_sys->unk04) == TRUE) {
-                    unisys->colosseum_sys->unk17F = 1;
+            if (unisys->colosseum_sys->statusChanged == 0) {
+                if (CommPlayer_GetMyStatus(unisys->colosseum_sys->commPlayer, &unisys->colosseum_sys->myStatus) ==
+                    TRUE) {
+                    unisys->colosseum_sys->statusChanged = 1;
                 }
             }
-            if (unisys->colosseum_sys->unk17F == 1) {
-                if (Colosseum_SendChoice((ColosseumChoice *)unisys->colosseum_sys->unk04) == TRUE) {
-                    unisys->colosseum_sys->unk17F = 0;
+            if (unisys->colosseum_sys->statusChanged == 1) {
+                if (Colosseum_SendChoice((ColosseumChoice *)&unisys->colosseum_sys->myStatus) == TRUE) {
+                    unisys->colosseum_sys->statusChanged = 0;
                 }
             }
         }
@@ -477,13 +479,13 @@ static void UnionComm_BuildBeacon(UnionSystem *unisys, UnionBeacon *beacon) {
         } else {
             MI_CpuCopy8(self->mycomm.parent->mac, beacon->mac, 6);
         }
-    } else if (self->mycomm.unk4 != NULL) {
-        MI_CpuCopy8(self->mycomm.unk4->mac, beacon->mac, 6);
+    } else if (self->mycomm.asked != NULL) {
+        MI_CpuCopy8(self->mycomm.asked->mac, beacon->mac, 6);
     }
     beacon->memberCount = GFL_NetGetNegotiatedCount();
     beacon->version = GAME_VERSION;
     beacon->language = GAME_LANGUAGE;
-    beacon->unk0A = self->step;
+    beacon->step = self->step;
     beacon->wantedKind = self->wantedKind;
     beacon->activity = self->activity;
     copyName(unisys->param->playerInfo->name, beacon->name, 8);
@@ -499,7 +501,7 @@ static void UnionComm_BuildBeacon(UnionSystem *unisys, UnionBeacon *beacon) {
     beacon->country = UnityTowerVisitor_GetCountry(unisys->param->playerInfo);
     beacon->province = UnityTowerVisitor_GetProvince(unisys->param->playerInfo);
     beacon->memberList = self->mycomm.memberList;
-    WifiList_CreateExchangeToken(GameData_GetWifiList(GSYS_GetGameData(unisys->param->gsys)), &beacon->unk50);
+    WifiList_CreateExchangeToken(GameData_GetWifiList(GSYS_GetGameData(unisys->param->gsys)), &beacon->friendToken);
     if (unisys->alloc.uniapp != NULL) {
         beacon->entryClosed = UnionApp_IsEntryClosed(unisys->alloc.uniapp);
     } else {
@@ -516,7 +518,7 @@ static int UnionComm_GetBeaconSize(void *work) {
 static BOOL UnionComm_IsBeaconJoinable(u8 gameCommandBase, u8 beaconCommandBase, void *work) {
     UnionSystem *unisys = work;
 
-    if (unisys->situ.mycomm.unk46_0 == 1) {
+    if (unisys->situ.mycomm.sameActivityOnly == 1) {
         if (gameCommandBase == 0x14 || beaconCommandBase == 0x14) {
             return FALSE;
         }
@@ -573,19 +575,19 @@ void UnionComm_SetSelf(UnionSystem *unisys, u32 which, u32 value) {
     UnionSelf *self = &unisys->situ;
 
     switch (which) {
-    case 0:
+    case UNION_SELF_TARGET:
         self->mycomm.target = (UnionBeaconEntry *)value;
         break;
-    case 1:
-        self->mycomm.unk4 = (UnionBeaconEntry *)value;
+    case UNION_SELF_ASKED:
+        self->mycomm.asked = (UnionBeaconEntry *)value;
         break;
-    case 2:
+    case UNION_SELF_ANSWER:
         self->mycomm.answer_pc = (UnionBeaconEntry *)value;
         break;
-    case 3:
+    case UNION_SELF_PARENT:
         self->mycomm.parent = (UnionBeaconEntry *)value;
         break;
-    case 4:
+    case UNION_SELF_ACTIVITY:
         self->activity = value;
         break;
     }
@@ -602,9 +604,9 @@ static void UnionComm_InitSelf(UnionSystem *unisys) {
 }
 
 void UnionGroup_ResetTargets(UnionGroup *group) {
-    group->unk19 = 0xff;
+    group->chosenActivity = 0xff;
     group->unk1B = 0xff;
-    group->unk1A = 0xff;
+    group->activityReply = 0xff;
 }
 
 void UnionGroup_Init(UnionSystem *unisys, UnionGroup *group) {
@@ -617,7 +619,7 @@ void UnionGroup_Init(UnionSystem *unisys, UnionGroup *group) {
     self->look = PlayerInfo_GetUnionView(unisys->param->playerInfo);
     self->gender = getTrainerGender(unisys->param->playerInfo);
     self->used = TRUE;
-    group->unk44 = 0xffff;
+    group->targetActorId = 0xffff;
 }
 
 int UnionGroup_AddMember(UnionGroup *group, const u8 *mac, u8 look, u8 gender) {
@@ -700,22 +702,22 @@ void UnionComm_SetState(UnionSystem *unisys, u8 state) {
 
 void UnionComm_SetCommandBase(u32 activity) {
     switch (activity) {
-    case 0x14:
+    case UNION_ACTIVITY_MULTI:
         GFL_NetSetGameCommandBase(0x17, 5);
         break;
-    case 0x15:
+    case UNION_ACTIVITY_MULTI_NO_LAUNCHER:
         GFL_NetSetGameCommandBase(0x18, 5);
         break;
-    case 0x16:
+    case UNION_ACTIVITY_MULTI_FLAT:
         GFL_NetSetGameCommandBase(0x19, 5);
         break;
-    case 0x17:
+    case UNION_ACTIVITY_MULTI_FLAT_NO_LAUNCHER:
         GFL_NetSetGameCommandBase(0x1a, 5);
         break;
-    case 3:
+    case UNION_ACTIVITY_DRAW:
         GFL_NetSetGameCommandBase(0x16, 5);
         break;
-    case 0x19:
+    case UNION_ACTIVITY_SPIN_TRADE:
         GFL_NetSetGameCommandBase(0x1b, 5);
         break;
     }

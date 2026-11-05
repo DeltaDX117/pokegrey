@@ -85,9 +85,9 @@ void FestMissionLog_Clear(FestMissionLog *log) {
     for (i = 0; i < FEST_MISSION_LOG_MAX; i++) {
         FestMissionLogEntry_Clear(&log->entries[i]);
     }
-    log->unk4EC = 0;
+    log->newestIndex = 0;
     log->count = 0;
-    log->unk4EE = 0;
+    log->top = 0;
 }
 
 // Adds an entry, over the oldest when the log is full, and returns where it went
@@ -274,7 +274,7 @@ BOOL FestMission_IsBeaconInvalid(LinkFestival *festival, const GameBeacon *beaco
         return TRUE;
     }
     FetchFestMissionCfgGimmickID(festival, info->index, header);
-    if (header->unk01 == 3 && !info->unk0_30) {
+    if (header->version == 3 && !info->unk0_30) {
         return TRUE;
     }
     if (FestMission_CheckFuncs[header->kind](info)) {
@@ -284,14 +284,15 @@ BOOL FestMission_IsBeaconInvalid(LinkFestival *festival, const GameBeacon *beaco
         return FALSE;
     }
     if (info->seconds > FEST_MISSION_SECONDS_MAX || info->count > FEST_MISSION_SCORE_MAX || info->unk8_30 >= 3 ||
-        info->extraSecondsIndex >= 4 || info->unk4_10 > 100 || info->unk10_0 > 50) {
+        info->extraSecondsIndex >= 4 || info->rewardItemCount > 100 || info->rewardItem2Count > 50) {
         return TRUE;
     }
-    if (PML_ItemIsDummy(info->unk4_0) || PML_ItemIsUnholdable(info->unk4_0) || info->unk4_0 == ITEM_MASTER_BALL) {
+    if (PML_ItemIsDummy(info->rewardItem) || PML_ItemIsUnholdable(info->rewardItem) ||
+        info->rewardItem == ITEM_MASTER_BALL) {
         return TRUE;
     }
-    if (info->unkC_22 != 0) {
-        if (PML_ItemIsDummy(info->unkC_22) || PML_ItemIsUnholdable(info->unkC_22)) {
+    if (info->rewardItem2 != 0) {
+        if (PML_ItemIsDummy(info->rewardItem2) || PML_ItemIsUnholdable(info->rewardItem2)) {
             return TRUE;
         }
     }

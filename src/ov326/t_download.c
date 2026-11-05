@@ -169,25 +169,32 @@ static BOOL TDownload_Exit(GameProc *proc, u32 *state, void *param, void *work) 
     return TRUE;
 }
 
+enum {
+    STEP_WAIT_WIPE_IN,
+    STEP_WAIT_SEQ_END,
+    STEP_WIPE_OUT,
+    STEP_WAIT_WIPE_OUT,
+};
+
 static BOOL TDownload_Main(GameProc *proc, u32 *state, void *param, void *work) {
     TDownloadWork *wk = work;
 
     switch (*state) {
-    case 0:
+    case STEP_WAIT_WIPE_IN:
         if (GFL_WipeIsFinished()) {
             (*state)++;
         }
         break;
-    case 1:
+    case STEP_WAIT_SEQ_END:
         if (wk->seq == T_DOWNLOAD_SEQ_END && PrintQueue_IsEmpty(wk->printQueue) == TRUE) {
             (*state)++;
         }
         break;
-    case 2:
+    case STEP_WIPE_OUT:
         GFL_WipeSet(WIPE_MODE_BOTH, WIPE_TYPE_FADE_OUT, WIPE_TYPE_FADE_OUT, 0, 6, 1, wk->heapId);
         (*state)++;
         break;
-    case 3:
+    case STEP_WAIT_WIPE_OUT:
         if (GFL_WipeIsFinished()) {
             return TRUE;
         }
@@ -207,7 +214,7 @@ static void TDownload_InitWork(TDownloadWork *wk) {
     int i;
 
     wk->seq = 0;
-    wk->mode = wk->param->unk8;
+    wk->mode = wk->param->mode;
     wk->flags = 0;
     wk->objFlags = 0;
     wk->bgScroll = 0;
@@ -268,21 +275,21 @@ static void TDownload_ExitWork(TDownloadWork *wk) {
     int i;
 
     if (wk->objFlags & T_DOWNLOAD_OBJ_FLAG_YES) {
-        if (wk->param->unkC != NULL) {
-            *wk->param->unkC = TRUE;
+        if (wk->param->yesVar != NULL) {
+            *wk->param->yesVar = TRUE;
         }
     } else {
-        if (wk->param->unkC != NULL) {
-            *wk->param->unkC = FALSE;
+        if (wk->param->yesVar != NULL) {
+            *wk->param->yesVar = FALSE;
         }
     }
     if (wk->flags & T_DOWNLOAD_FLAG_SELECTED) {
-        if (wk->param->unk10 != NULL) {
-            *wk->param->unk10 = wk->slotPos + 1;
+        if (wk->param->slotVar != NULL) {
+            *wk->param->slotVar = wk->slotPos + 1;
         }
     } else {
-        if (wk->param->unk10 != NULL) {
-            *wk->param->unk10 = 0;
+        if (wk->param->slotVar != NULL) {
+            *wk->param->slotVar = 0;
         }
     }
     TDownloadUtil_FreeList(wk);

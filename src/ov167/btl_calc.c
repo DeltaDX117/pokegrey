@@ -10,6 +10,7 @@
 #include "constants/battle.h"
 #include "constants/moves.h"
 #include "constants/pokemon.h"
+#include "constants/trainer_classes.h"
 #include "constants/types.h"
 #include "gfl/heap.h"
 #include "pml/item.h"
@@ -369,16 +370,16 @@ fx32 WeatherPowerMod(u32 weather, u32 moveType) {
 
 void BtlCalc_MakeMoveCondition(MoveConditionParam param, BattleMon *mon, BattleCondition *out) {
     switch (param.type) {
-    case 3:
+    case BTL_CONDITION_TYPE_DEPEND_MON:
         *out = MakeConditionDependPoke(GetMonID(mon));
         break;
-    case 2:
+    case BTL_CONDITION_TYPE_TURNS:
         *out = SetConditionTurns(BtlCalc_RandomRange(param.min, param.max));
         break;
-    case 1:
+    case BTL_CONDITION_TYPE_PERMANENT:
         *out = MakeConditionPermanentTurnsParam(param.max, param.min);
         break;
-    case 4: {
+    case BTL_CONDITION_TYPE_DEPEND_MON_TURNS: {
         u8 monId = GetMonID(mon);
         u8 turns = BtlCalc_RandomRange(param.min, param.max);
         *out = MakeConditionDependPokeTurns(monId, turns);
@@ -560,7 +561,7 @@ BOOL BtlCalc_IsBossTrainerClass(u16 trainerClass) {
     if (BtlCalc_IsEliteFourClass(trainerClass)) {
         return TRUE;
     }
-    return trainerClass == 0x59;
+    return trainerClass == TRAINER_CLASS_PKMN_TRAINER_ALDER;
 }
 
 // The prize money of the opposing trainers
@@ -696,19 +697,19 @@ u8 DecideMoveTargetAuto(BtlMainModule *mainModule, BtlPokeCon *pokeCon, BattleMo
         case MOVE_TARGET_FOE:
         case MOVE_TARGET_RANDOM_FOE:
             if (farTarget) {
-                posFlags = (6 << 8) | pos;
+                posFlags = BTL_EXPOS_FLAGS(BTL_EXPOS_ALL_FOES, pos);
             } else {
-                posFlags = (1 << 8) | pos;
+                posFlags = BTL_EXPOS_FLAGS(BTL_EXPOS_ADJACENT_FOES, pos);
             }
             break;
         case MOVE_TARGET_USER_OR_ALLY:
-            posFlags = (3 << 8) | pos;
+            posFlags = BTL_EXPOS_FLAGS(BTL_EXPOS_ADJACENT_SIDE, pos);
             break;
         case MOVE_TARGET_ALLY:
             if (farTarget) {
-                posFlags = (7 << 8) | pos;
+                posFlags = BTL_EXPOS_FLAGS(BTL_EXPOS_ALL_SIDE, pos);
             } else {
-                posFlags = (4 << 8) | pos;
+                posFlags = BTL_EXPOS_FLAGS(BTL_EXPOS_ADJACENT_ALLIES, pos);
             }
             break;
         case MOVE_TARGET_USER:

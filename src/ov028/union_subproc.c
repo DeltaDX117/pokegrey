@@ -98,30 +98,30 @@ GameEvent *UnionCommand_CreateEvent(GameSystem *gsys, Field *field, UnionSystem 
 // warp, 26 the colosseum's party select, 27 the colosseum's battle, 28 the trainer card again, and 29 the phrase select
 static const UnionCommandInfo sUnionCommands[] = {
     { NULL, 0, 0 },
-    { UnionCommand_TrainerCard, 2, 1 },
-    { UnionCommand_Trade, UNION_ACTIVITY_TRADE, 1 },
-    { UnionCommand_App, 3, 0 },
-    { UnionCommand_App, UNION_ACTIVITY_EGG_TRADE, 0 },
-    { UnionCommand_WarpA, 4, 4 },
-    { UnionCommand_WarpA, 5, 5 },
-    { UnionCommand_WarpA, 6, 6 },
-    { UnionCommand_WarpA, 7, 7 },
-    { UnionCommand_WarpA, 8, 8 },
-    { UnionCommand_WarpA, 9, 9 },
-    { UnionCommand_WarpA, 10, 10 },
-    { UnionCommand_WarpA, 11, 11 },
-    { UnionCommand_WarpA, 12, 12 },
-    { UnionCommand_WarpA, 13, 13 },
-    { UnionCommand_WarpA, 14, 14 },
-    { UnionCommand_WarpA, 15, 15 },
-    { UnionCommand_WarpA, 16, 16 },
-    { UnionCommand_WarpA, 17, 17 },
-    { UnionCommand_WarpA, 18, 18 },
-    { UnionCommand_WarpA, 19, 19 },
-    { UnionCommand_WarpB, 20, 20 },
-    { UnionCommand_WarpB, 21, 21 },
-    { UnionCommand_WarpB, 22, 22 },
-    { UnionCommand_WarpB, 23, 23 },
+    { UnionCommand_TrainerCard, UNION_ACTIVITY_CARD, UNION_ACTIVITY_TALKING },
+    { UnionCommand_Trade, UNION_ACTIVITY_TRADE, UNION_ACTIVITY_TALKING },
+    { UnionCommand_App, UNION_ACTIVITY_DRAW, 0 },
+    { UnionCommand_App, UNION_ACTIVITY_SPIN_TRADE, 0 },
+    { UnionCommand_WarpA, UNION_ACTIVITY_SINGLE, UNION_ACTIVITY_SINGLE },
+    { UnionCommand_WarpA, UNION_ACTIVITY_SINGLE_NO_LAUNCHER, UNION_ACTIVITY_SINGLE_NO_LAUNCHER },
+    { UnionCommand_WarpA, UNION_ACTIVITY_SINGLE_FLAT, UNION_ACTIVITY_SINGLE_FLAT },
+    { UnionCommand_WarpA, UNION_ACTIVITY_SINGLE_FLAT_NO_LAUNCHER, UNION_ACTIVITY_SINGLE_FLAT_NO_LAUNCHER },
+    { UnionCommand_WarpA, UNION_ACTIVITY_DOUBLE, UNION_ACTIVITY_DOUBLE },
+    { UnionCommand_WarpA, UNION_ACTIVITY_DOUBLE_NO_LAUNCHER, UNION_ACTIVITY_DOUBLE_NO_LAUNCHER },
+    { UnionCommand_WarpA, UNION_ACTIVITY_DOUBLE_FLAT, UNION_ACTIVITY_DOUBLE_FLAT },
+    { UnionCommand_WarpA, UNION_ACTIVITY_DOUBLE_FLAT_NO_LAUNCHER, UNION_ACTIVITY_DOUBLE_FLAT_NO_LAUNCHER },
+    { UnionCommand_WarpA, UNION_ACTIVITY_TRIPLE, UNION_ACTIVITY_TRIPLE },
+    { UnionCommand_WarpA, UNION_ACTIVITY_TRIPLE_NO_LAUNCHER, UNION_ACTIVITY_TRIPLE_NO_LAUNCHER },
+    { UnionCommand_WarpA, UNION_ACTIVITY_TRIPLE_FLAT, UNION_ACTIVITY_TRIPLE_FLAT },
+    { UnionCommand_WarpA, UNION_ACTIVITY_TRIPLE_FLAT_NO_LAUNCHER, UNION_ACTIVITY_TRIPLE_FLAT_NO_LAUNCHER },
+    { UnionCommand_WarpA, UNION_ACTIVITY_ROTATION, UNION_ACTIVITY_ROTATION },
+    { UnionCommand_WarpA, UNION_ACTIVITY_ROTATION_NO_LAUNCHER, UNION_ACTIVITY_ROTATION_NO_LAUNCHER },
+    { UnionCommand_WarpA, UNION_ACTIVITY_ROTATION_FLAT, UNION_ACTIVITY_ROTATION_FLAT },
+    { UnionCommand_WarpA, UNION_ACTIVITY_ROTATION_FLAT_NO_LAUNCHER, UNION_ACTIVITY_ROTATION_FLAT_NO_LAUNCHER },
+    { UnionCommand_WarpB, UNION_ACTIVITY_MULTI, UNION_ACTIVITY_MULTI },
+    { UnionCommand_WarpB, UNION_ACTIVITY_MULTI_NO_LAUNCHER, UNION_ACTIVITY_MULTI_NO_LAUNCHER },
+    { UnionCommand_WarpB, UNION_ACTIVITY_MULTI_FLAT, UNION_ACTIVITY_MULTI_FLAT },
+    { UnionCommand_WarpB, UNION_ACTIVITY_MULTI_FLAT_NO_LAUNCHER, UNION_ACTIVITY_MULTI_FLAT_NO_LAUNCHER },
     { UnionCommand_WarpRoom, UNION_ACTIVITY_NONE, UNION_ACTIVITY_NONE },
     { UnionCommand_Colosseum, UNION_ACTIVITY_NONE, UNION_ACTIVITY_NONE },
     { Colosseum_CommandBattle, UNION_ACTIVITY_NONE, UNION_ACTIVITY_NONE },
@@ -141,7 +141,7 @@ static GameEventReturnCode UnionMain_RunCommand(GameEvent *event, u32 *seq, void
     case 0:
         UnionMsg_FreeAll(unisys);
         if (sUnionCommands[subproc->id].startActivity != UNION_ACTIVITY_NONE) {
-            UnionComm_SetSelf(unisys, 4, sUnionCommands[subproc->id].startActivity);
+            UnionComm_SetSelf(unisys, UNION_SELF_ACTIVITY, sUnionCommands[subproc->id].startActivity);
         }
         (*seq)++;
         // fallthrough
@@ -155,7 +155,7 @@ static GameEventReturnCode UnionMain_RunCommand(GameEvent *event, u32 *seq, void
         break;
     case 2:
         if (sUnionCommands[subproc->id].endActivity != UNION_ACTIVITY_NONE) {
-            UnionComm_SetSelf(unisys, 4, sUnionCommands[subproc->id].endActivity);
+            UnionComm_SetSelf(unisys, UNION_SELF_ACTIVITY, sUnionCommands[subproc->id].endActivity);
         }
         subproc->id = 0;
         subproc->arg = NULL;
@@ -192,35 +192,47 @@ static BOOL UnionCommand_TrainerCard(GameSystem *gsys, UnionSystem *unisys, Fiel
     return FALSE;
 }
 
+enum {
+    STEP_FADE_OUT,
+    STEP_CLOSE_FIELD,
+    STEP_START_TRADE,
+    STEP_WAIT_TRADE,
+    STEP_START_EVOLVE,
+    STEP_WAIT_EVOLVE,
+    STEP_OPEN_FIELD,
+    STEP_FADE_IN,
+    STEP_END,
+};
+
 static BOOL UnionCommand_Trade(GameSystem *gsys, UnionSystem *unisys, Field *field, void *arg, GameEvent *event,
                                GameEvent **next, u8 *step) {
     PokemonTradeParam *trade = arg;
     EvolutionDemoParam *evolution;
 
     switch (*step) {
-    case 0:
+    case STEP_FADE_OUT:
         *next = CallFieldMapEntranceOutTransitionDefault(gsys, field, FIELD_TRANSITION_FADE_BLACK, 0);
         (*step)++;
         break;
-    case 1:
+    case STEP_CLOSE_FIELD:
         *next = CreateFieldCloseEvent(gsys, field);
         (*step)++;
         break;
-    case 2:
+    case STEP_START_TRADE:
         GSYS_QueueProc(gsys, OVERLAY_POKEMONTRADE, &POKEMONTRADE_UNION_PROC_FUNCTIONS, trade);
         (*step)++;
         break;
-    case 3:
+    case STEP_WAIT_TRADE:
         if (GSYS_GetProcMgrState(gsys) != 0) {
             break;
         }
         if (trade->next == TRADE_NEXT_EVOLVE) {
-            *step = 4;
+            *step = STEP_START_EVOLVE;
         } else {
-            *step = 6;
+            *step = STEP_OPEN_FIELD;
         }
         break;
-    case 4:
+    case STEP_START_EVOLVE:
         evolution = trade->evolution;
         evolution->gameData = trade->gameData;
         evolution->party = trade->party;
@@ -233,24 +245,24 @@ static BOOL UnionCommand_Trade(GameSystem *gsys, UnionSystem *unisys, Field *fie
         GSYS_QueueProc(gsys, OVERLAY_EVOLUTION_DEMO, &EVOLUTION_DEMO_PROC_FUNCTIONS, evolution);
         (*step)++;
         break;
-    case 5:
+    case STEP_WAIT_EVOLVE:
         if (GSYS_GetProcMgrState(gsys) != 0) {
             break;
         }
         if (GFL_NetErrCheck()) {
-            *step = 6;
+            *step = STEP_OPEN_FIELD;
         } else {
             trade->next = TRADE_NEXT_EVOLVE;
-            *step = 2;
+            *step = STEP_START_TRADE;
         }
         break;
-    case 6:
+    case STEP_OPEN_FIELD:
         *next = EventFieldOpen_CreateHeadless(gsys);
-        *step = 7;
+        *step = STEP_FADE_IN;
         break;
-    case 7:
+    case STEP_FADE_IN:
         *next = CallFieldMapEntranceInTransition(gsys, field, FIELD_TRANSITION_FADE_BLACK, 0, 1, 0, 0);
-        *step = 8;
+        *step = STEP_END;
         break;
     default:
         return TRUE;
@@ -286,7 +298,7 @@ static BOOL UnionCommand_App(GameSystem *gsys, UnionSystem *unisys, Field *field
     case 2:
         GFL_OvlLoad(OVERLAY_ID(69));
         unisys->alloc.uniapp = UnionApp_Create(unisys, 3, 5, GetGameDataPlayerInfo(unisys->param->gameData));
-        if (self->mycomm.unk46_1 == 1) {
+        if (self->mycomm.joinedRecruit == 1) {
             *step = 5;
         } else {
             (*step)++;
@@ -333,7 +345,7 @@ static BOOL UnionCommand_App(GameSystem *gsys, UnionSystem *unisys, Field *field
         }
         break;
     case 11:
-        if (self->mycomm.unk46_1 == 1) {
+        if (self->mycomm.joinedRecruit == 1) {
             joined = UnionApp_GetJoined(unisys->alloc.uniapp);
             if (UnionMain_SendConfirmProfile(joined, GetGameDataPlayerInfo(unisys->param->gameData)) == TRUE) {
                 UnionApp_JoinSelf(unisys->alloc.uniapp);
@@ -587,9 +599,9 @@ static BOOL UnionCommand_Colosseum(GameSystem *gsys, UnionSystem *unisys, Field 
         break;
     case 12:
         battle->party = colosseum->party[selfId];
-        battle->unk12 = colosseum->unk16C[selfId];
+        battle->clientId = colosseum->positions[selfId];
         battle->regulation = unisys->alloc.regulation;
-        if (selfId == 0 || (colosseum->unk16C[0] & 2) == (colosseum->unk16C[selfId] & 2)) {
+        if (selfId == 0 || (colosseum->positions[0] & 2) == (colosseum->positions[selfId] & 2)) {
             battle->bgm = 0x489;
         } else {
             battle->bgm = 0x48a;
@@ -602,7 +614,7 @@ static BOOL UnionCommand_Colosseum(GameSystem *gsys, UnionSystem *unisys, Field 
         if (!GFL_NetErrCheck()) {
             wifiList = GameData_GetWifiList(GSYS_GetGameData(gsys));
             count = GFL_NetGetNegotiatedCount();
-            isRedTeam = colosseum->unk16C[selfId] & 1;
+            isRedTeam = colosseum->positions[selfId] & 1;
             for (i = 0; i < count; i++) {
                 if (i == selfId) {
                     continue;
@@ -610,7 +622,7 @@ static BOOL UnionCommand_Colosseum(GameSystem *gsys, UnionSystem *unisys, Field 
                 if (WifiList_FindFriendByPlayerInfo(wifiList, &colosseum->members[i].info, &friendIndex) != TRUE) {
                     continue;
                 }
-                if (isRedTeam == (colosseum->unk16C[i] & 1)) {
+                if (isRedTeam == (colosseum->positions[i] & 1)) {
                     WifiList_SetFriendLastDateToNow(wifiList, friendIndex);
                 } else {
                     switch (battle->players.battle.result) {

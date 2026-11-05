@@ -27,7 +27,7 @@ typedef struct {
     int (*getBeaconSize)(void *work);
     // Whether a beacon's game is one to join, a BOOL (*)(u8 gameCommandBase, u8 beaconCommandBase, void *work) that the
     // games give with fewer parameters
-    void *unk20;
+    void *beaconFilter;
     // Called with the wireless library's error when it fails
     void (*errorCallback)(NetHandle *handle, int a1, void *work);
     void (*unk28)(NetHandle *handle, int a1, void *work);
@@ -42,7 +42,7 @@ typedef struct {
             u8 unk34_0[8];
             void (*callback)(int code, int param, void *work);
         } wifiError;
-    } unk34;
+    } wifiHooks;
     // The Wi-Fi friend list (DWCFriendData) and user data (DWCUserData)
     int (*getFriendData)(void *work);
     int (*getUserData)(void *work);
@@ -56,7 +56,7 @@ typedef struct {
             u32 unk4C_0;
             u32 gameId;
         } id;
-    } unk4C;
+    } beaconId;
     HeapID parentHeapId;
     HeapID heapId;
     HeapID wifiHeapId;
@@ -120,7 +120,7 @@ typedef struct {
     int (*update)(u16 connectBits);
     BOOL (*disconnect)(int a0, int a1);
     BOOL (*end)(void (*callback)(BOOL ok));
-    BOOL (*unk18)(void);
+    BOOL (*clearBeacons)(void);
     BOOL (*unk1C)(void);
     BOOL (*unk20)(void);
     BOOL (*unk24)(void);
@@ -160,8 +160,8 @@ typedef struct {
     void (*setDisconnectError)(int a0);
     // Whether the Wi-Fi friend of an index can be connected to
     int (*canConnectFriend)(int a0);
-    int (*unk94)(void);
-    int (*unk98)(void);
+    int (*isVoiceChatEnabled)(void);
+    int (*getLastNetId)(void);
     // The infrared device's work each frame, whether it can send, whether it is its turn, whether the other machine
     // was seen, and whether the two are linked
     void (*poll)(void);
@@ -169,7 +169,7 @@ typedef struct {
     BOOL (*isSendTurn)(void);
     BOOL (*isPeerSeen)(void);
     BOOL (*isLinked)(void);
-    BOOL (*unkB0)(void);
+    BOOL (*isSendBlocked)(void);
     void (*startLink)(void);
     // Whether connections are accepted
     void (*setAcceptConnect)(int a0);
@@ -233,7 +233,7 @@ void GFL_NetErrUpdate(void);
 // What the game is to do about the network's error, if there is one: 1 to go on, 2 to end the connection
 BOOL GFL_NetErrCheck(void);
 void GFL_NetErrMarkShown(void);
-BOOL GFL_NetErrShow(u32 a0);
+BOOL GFL_NetErrShow(u32 fatal);
 // Shows the fatal error screen for a Wi-Fi error with the message given
 void GFL_NetErrShowWifi(u32 message);
 // GFL_NetErrShow(1)
@@ -274,7 +274,7 @@ void NetDefine_UnloadDevice(int type);
 void NetBgmVolume_Set(u16 trackMask, s32 volume);
 
 // net.c: starts and ends the network, and passes calls to the device and the other parts of the library
-void GFL_NetBoot(int a0, int a1, HeapID parentHeapId, HeapID heapId);
+void GFL_NetBoot(int libraryHeapId, int unused, HeapID parentHeapId, HeapID heapId);
 void GFL_NetInit(const GFLNetInitData *pNetInit, void (*callback)(void *work), void *work);
 BOOL GFL_NetIsInitialized(void);
 // Whether the network has ended
@@ -318,12 +318,13 @@ void GFL_NetSetIconScreen(BOOL top, HeapID heapId);
 BOOL GFL_NetIsParent(void);
 // Whether a machine's negotiation has been accepted
 BOOL GFL_NetIsHandleNegotiated(NetHandle *handle);
-// Send a command to every machine, or to one; the game's commands wait for the negotiation
+// Send a command to every machine, or to one; the game's commands wait for the negotiation. With noDuplicate, a command
+// that is still queued from this machine isn't sent again
 BOOL GFL_NetSendCommand(NetHandle *handle, int command, u16 size, const void *data);
-BOOL GFL_NetSendCommandToMachine(NetHandle *handle, u8 sendID, u16 command, u32 size, const void *data, u32 a5, BOOL a6,
-                                 BOOL noCopy);
-BOOL GFL_NetSendCommandToBits(NetHandle *handle, int dest, u16 command, int size, const void *data, u32 a5, BOOL a6,
-                              BOOL noCopy);
+BOOL GFL_NetSendCommandToMachine(NetHandle *handle, u8 sendID, u16 command, u32 size, const void *data, u32 unused,
+                                 BOOL noDuplicate, BOOL noCopy);
+BOOL GFL_NetSendCommandToBits(NetHandle *handle, int dest, u16 command, int size, const void *data, u32 unused,
+                              BOOL noDuplicate, BOOL noCopy);
 BOOL GFL_NetIsSendQueueEmpty(NetHandle *handle);
 void GFL_NetSendTiming(NetHandle *handle, u16 timing);
 BOOL GFL_NetIsTimingRecv(NetHandle *handle, u16 timing);
